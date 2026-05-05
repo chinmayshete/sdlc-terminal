@@ -20,9 +20,10 @@
  */
 
 pipeline {
-    agent {
-        label 'nodejs-18-docker'  // Agent: Node 18+ AND Docker installed
-    }
+    // agent {
+    //     label 'nodejs-18-docker'  // Agent: Node 18+ AND Docker installed
+    // }
+    agent any
 
     // ─── Parameters ─────────────────────────────────────────────────────────
     parameters {
