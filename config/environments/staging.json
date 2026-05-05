@@ -1,0 +1,22 @@
+{
+  "appEnv": "staging",
+  "features": {
+    "useMock": false,
+    "enableCodeScanning": true,
+    "enableCicdIntegration": true
+  },
+  "logging": {
+    "level": "info",
+    "format": "json"
+  },
+  "database": {
+    "host": "staging-db.freddiemac.internal",
+    "port": 5432,
+    "name": "sdlc_staging",
+    "ssl": true
+  },
+  "services": {
+    "jenkinsUrl": "https://jenkins-staging.freddiemac.internal",
+    "sonarQubeUrl": "https://sonar-staging.freddiemac.internal"
+  }
+}

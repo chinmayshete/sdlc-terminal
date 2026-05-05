@@ -1,0 +1,6 @@
+{
+  "id": "OPS-301",
+  "title": "Add healthcheck and readiness support",
+  "description": "Create explicit health and readiness endpoints for local container and CI usage",
+  "priority": "HIGH"
+}

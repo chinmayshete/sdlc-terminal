@@ -1,0 +1,31 @@
+# CODEOWNERS — Freddie Mac SDLC Terminal
+# GitHub enforces these reviews automatically on PRs.
+# Syntax: <pattern> <team-or-user>
+
+# ── Default: all changes require a core team review ───────────────────────────
+*                                       @freddie-mac-engineering/sdlc-core-team
+
+# ── CI/CD and DevOps changes ─────────────────────────────────────────────────
+Jenkinsfile                             @freddie-mac-engineering/devops-leads
+.github/                                @freddie-mac-engineering/devops-leads
+terraform/                              @freddie-mac-engineering/devops-leads
+scripts/                                @freddie-mac-engineering/devops-leads
+Dockerfile                              @freddie-mac-engineering/devops-leads
+
+# ── Security-sensitive files ─────────────────────────────────────────────────
+src/config/vault.ts                     @freddie-mac-engineering/security-team
+src/config/config-manager.ts            @freddie-mac-engineering/security-team
+src/utils/code-scanner.ts               @freddie-mac-engineering/security-team
+config/environments/prod.json           @freddie-mac-engineering/release-managers
+config/environments/staging.json        @freddie-mac-engineering/devops-leads
+.env.example                            @freddie-mac-engineering/security-team
+
+# ── Git and policy utilities ──────────────────────────────────────────────────
+src/utils/git-policy.ts                 @freddie-mac-engineering/devops-leads
+src/utils/git.ts                        @freddie-mac-engineering/devops-leads
+
+# ── Core orchestration (high risk) ───────────────────────────────────────────
+src/core/orchestrator.ts                @freddie-mac-engineering/sdlc-core-team @freddie-mac-engineering/devops-leads
+
+# ── Documentation ─────────────────────────────────────────────────────────────
+*.md                                    @freddie-mac-engineering/sdlc-core-team

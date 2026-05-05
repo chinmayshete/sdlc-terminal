@@ -1,0 +1,22 @@
+{
+  "appEnv": "prod",
+  "features": {
+    "useMock": false,
+    "enableCodeScanning": true,
+    "enableCicdIntegration": true
+  },
+  "logging": {
+    "level": "warn",
+    "format": "json"
+  },
+  "database": {
+    "host": "prod-db.freddiemac.internal",
+    "port": 5432,
+    "name": "sdlc_prod",
+    "ssl": true
+  },
+  "services": {
+    "jenkinsUrl": "https://jenkins.freddiemac.internal",
+    "sonarQubeUrl": "https://sonar.freddiemac.internal"
+  }
+}

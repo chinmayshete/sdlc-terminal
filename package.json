@@ -1,0 +1,35 @@
+{
+  "name": "sdlc-cli",
+  "version": "0.1.0",
+  "description": "Minimal terminal-based SDLC assistant CLI MVP",
+  "main": "dist/index.js",
+  "bin": {
+    "sdlc": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "terminal": "tsx src/index.ts terminal",
+    "lint": "eslint src/ --ext .ts --max-warnings 0",
+    "lint:fix": "eslint src/ --ext .ts --fix",
+    "format:check": "prettier --check \"src/**/*.ts\""
+  },
+  "dependencies": {
+    "chalk": "^4.1.2",
+    "commander": "^14.0.0",
+    "dotenv": "^16.6.1",
+    "simple-git": "^3.28.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.59.2",
+    "@typescript-eslint/parser": "^8.59.2",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-no-secrets": "^2.3.3",
+    "eslint-plugin-security": "^4.0.0",
+    "prettier": "^3.8.3",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
+  }
+}

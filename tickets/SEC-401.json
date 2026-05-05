@@ -1,0 +1,6 @@
+{
+  "id": "SEC-401",
+  "title": "Add request logging middleware",
+  "description": "Add lightweight request logging middleware and wire it into the Express server",
+  "priority": "MEDIUM"
+}

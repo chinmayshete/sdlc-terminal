@@ -1,0 +1,22 @@
+{
+  "appEnv": "dev",
+  "features": {
+    "useMock": true,
+    "enableCodeScanning": true,
+    "enableCicdIntegration": false
+  },
+  "logging": {
+    "level": "debug",
+    "format": "text"
+  },
+  "database": {
+    "host": "localhost",
+    "port": 5432,
+    "name": "sdlc_dev",
+    "ssl": false
+  },
+  "services": {
+    "jenkinsUrl": "http://localhost:8080",
+    "sonarQubeUrl": "http://localhost:9000"
+  }
+}

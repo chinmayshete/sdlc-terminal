@@ -1,0 +1,26 @@
+{
+  "azure": {
+    "deployment": "gpt-4.1",
+    "apiVersion": "2024-12-01-preview"
+  },
+  "features": {
+    "useMock": false,
+    "enableCodeScanning": true,
+    "enableCicdIntegration": true
+  },
+  "logging": {
+    "level": "info",
+    "format": "text"
+  },
+  "database": {
+    "host": "localhost",
+    "port": 5432,
+    "name": "sdlc",
+    "ssl": false
+  },
+  "services": {
+    "jenkinsUrl": "http://localhost:8080",
+    "vaultAddr": "http://127.0.0.1:8200",
+    "sonarQubeUrl": "http://localhost:9000"
+  }
+}

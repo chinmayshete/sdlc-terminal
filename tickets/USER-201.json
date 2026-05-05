@@ -1,0 +1,6 @@
+{
+  "id": "USER-201",
+  "title": "Add current user profile endpoint",
+  "description": "Create an endpoint to fetch the current user profile by email",
+  "priority": "MEDIUM"
+}

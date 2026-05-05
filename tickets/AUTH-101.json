@@ -1,0 +1,6 @@
+{
+  "id": "AUTH-101",
+  "title": "Add login endpoint",
+  "description": "Create a login API using email and password",
+  "priority": "HIGH"
+}
