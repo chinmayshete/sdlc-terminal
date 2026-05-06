@@ -473,29 +473,33 @@ def deployToECS(Map args) {
 
     echo "Deploying ${image} to ECS ${cluster}/${service}..."
 
+    // Write Python to a separate file — avoids Groovy/Python brace conflict
+    writeFile file: 'update-task-def.py', text: '''
+import sys, json
+
+td = json.load(sys.stdin)
+
+for c in td.get("containerDefinitions", []):
+    if c.get("name") == sys.argv[1]:
+        c["image"] = sys.argv[2]
+        env_list = [e for e in c.get("environment", []) if e["name"] != "APP_ENV"]
+        env_list.append({"name": "APP_ENV", "value": sys.argv[3]})
+        c["environment"] = env_list
+
+for key in ["taskDefinitionArn", "revision", "status", "requiresAttributes",
+            "compatibilities", "registeredAt", "registeredBy"]:
+    td.pop(key, None)
+
+print(json.dumps(td))
+'''
+
     sh """
-        # 1. Get current task definition (strip non-register fields)
+        # 1. Get current task definition and update image
         aws ecs describe-task-definition \
             --task-definition ${service} \
             --region ${region} \
             --query 'taskDefinition' \
-        | python3 -c "
-import sys, json
-td = json.load(sys.stdin)
-# Update image in all containers
-for c in td.get('containerDefinitions', []):
-    if c.get('name') == '${APP_NAME}':
-        c['image'] = '${image}'
-        # Inject APP_ENV via environment (no secrets)
-        env_list = [e for e in c.get('environment', []) if e['name'] != 'APP_ENV']
-        env_list.append({'name': 'APP_ENV', 'value': '${appEnv}'})
-        c['environment'] = env_list
-# Remove read-only fields
-for key in ['taskDefinitionArn','revision','status','requiresAttributes',
-            'compatibilities','registeredAt','registeredBy']:
-    td.pop(key, None)
-print(json.dumps(td))
-        " > new-task-def.json
+        | python3 update-task-def.py '${APP_NAME}' '${image}' '${appEnv}' > new-task-def.json
 
         # 2. Register new revision
         NEW_ARN=\$(aws ecs register-task-definition \
