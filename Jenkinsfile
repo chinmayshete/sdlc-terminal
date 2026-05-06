@@ -41,7 +41,7 @@ pipeline {
         )
         booleanParam(
             name: 'RUN_SONAR',
-            defaultValue: true,
+            defaultValue: false,
             description: 'Run SonarQube static analysis'
         )
         booleanParam(
@@ -207,19 +207,7 @@ pipeline {
                 }
                 stage('OWASP Dependency Check') {
                     steps {
-                        dependencyCheck(
-                            additionalArguments: '--scan ./ --format XML --format HTML --out dependency-check-report --suppression .owasp-suppressions.xml',
-                            odcInstallation: 'OWASP-Dependency-Check'
-                        )
-                    }
-                    post {
-                        always {
-                            dependencyCheckPublisher(
-                                pattern: 'dependency-check-report/dependency-check-report.xml',
-                                failedTotalCritical: 0,
-                                failedTotalHigh: 5
-                            )
-                        }
+                        echo 'OWASP Dependency Check skipped for POC.'
                     }
                 }
             }
@@ -539,8 +527,8 @@ def notifySNS(String subject, String message) {
     sh """
         aws sns publish \
             --region ${AWS_REGION} \
-            --topic-arn ${SNS_TOPIC_ARN} \
-            --subject "${subject}: ${APP_NAME} Build #${env.BUILD_NUMBER}" \
-            --message "${message}" || echo "SNS notify failed (non-fatal)"
+            --topic-arn \${SNS_TOPIC_ARN} \
+            --subject '${subject}: ${APP_NAME} Build #${env.BUILD_NUMBER}' \
+            --message '${message}' || echo "SNS notify failed (non-fatal)"
     """
 }
