@@ -66,7 +66,7 @@ pipeline {
         // ── AWS (Vault-injected via Jenkins Credentials — no static keys) ──
         AWS_REGION          = 'us-east-1'
         AWS_ACCOUNT_ID      = credentials('aws-account-id')
-        ECR_REPO_NAME       = 'sdlc-terminal'
+        ECR_REPO_NAME       = 'freddiemac/sdlc-terminal'
         ECR_REGISTRY        = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
         // ── ECS Cluster / Service names (env-specific) ─────────────────────
@@ -80,12 +80,12 @@ pipeline {
         // ── Vault (AppRole) ────────────────────────────────────────────────
         // ── Vault (AppRole) — skipped for POC ─────────────────────────────
         VAULT_ADDR          = 'http://localhost:8200'
-        VAULT_ROLE_ID       = 'dummy'
-        VAULT_SECRET_ID     = 'dummy'
+        VAULT_ROLE_ID = credentials('vault-role-id')
+        VAULT_SECRET_ID = credentials('vault-secret-id')
 
         // ── SonarQube ──────────────────────────────────────────────────────
         SONAR_TOKEN         = credentials('sonarqube-token')
-        SONAR_HOST_URL      = credentials('sonarqube-host-url')
+        SONAR_HOST_URL      = 'http://98.85.227.214:9000'
         SONAR_PROJECT_KEY   = 'freddiemac-sdlc-terminal'
 
         // ── Notifications ──────────────────────────────────────────────────
@@ -298,7 +298,7 @@ pipeline {
         // ── 9. Deploy to Dev ─────────────────────────────────────────────────
         stage('Deploy — Dev') {
             when {
-                expression {  return false }
+                expression {  return true }
             }
             steps {
                 script {
