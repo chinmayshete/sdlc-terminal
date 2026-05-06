@@ -77,13 +77,13 @@ pipeline {
 
         // ── Vault (AppRole) ────────────────────────────────────────────────
         // ── Vault (AppRole) — skipped for POC ─────────────────────────────
-        VAULT_ADDR          = 'http://localhost:8200'
+        VAULT_ADDR          = 'https://44.221.158.211:8200'
         VAULT_ROLE_ID = credentials('vault-role-id')
         VAULT_SECRET_ID = credentials('vault-secret-id')
 
         // ── SonarQube ──────────────────────────────────────────────────────
         SONAR_TOKEN         = credentials('sonarqube-token')
-        SONAR_HOST_URL      = 'http://98.85.227.214:9000'
+        SONAR_HOST_URL      = 'http://44.221.158.211:9000'
         SONAR_PROJECT_KEY   = 'freddiemac-sdlc-terminal'
 
         // ── Notifications ──────────────────────────────────────────────────
