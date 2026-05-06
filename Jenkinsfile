@@ -20,9 +20,7 @@
  */
 
 pipeline {
-    agent {
-        label 'nodejs-24-docker'  // Agent: Node 20+ AND Docker installed
-    }
+    agent any 
 
     // ─── Parameters ─────────────────────────────────────────────────────────
     parameters {
@@ -78,9 +76,10 @@ pipeline {
         ECS_SERVICE_PROD    = 'sdlc-terminal-prod'
 
         // ── Vault (AppRole) ────────────────────────────────────────────────
-        VAULT_ADDR          = credentials('vault-addr')
-        VAULT_ROLE_ID       = credentials('vault-role-id')
-        VAULT_SECRET_ID     = credentials('vault-secret-id')
+        // ── Vault (AppRole) — skipped for POC ─────────────────────────────
+        VAULT_ADDR          = 'http://localhost:8200'
+        VAULT_ROLE_ID       = 'dummy'
+        VAULT_SECRET_ID     = 'dummy'
 
         // ── SonarQube ──────────────────────────────────────────────────────
         SONAR_TOKEN         = credentials('sonarqube-token')
