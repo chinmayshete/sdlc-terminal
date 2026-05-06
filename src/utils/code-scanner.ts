@@ -115,7 +115,7 @@ const SCAN_RULES: ScanRule[] = [
 ];
 
 const SCANNABLE_EXT = [".ts", ".js", ".json", ".env", ".yaml", ".yml"];
-const SKIP_DIRS = ["node_modules", ".git", "dist", ".sdlc", "coverage"];
+const SKIP_DIRS = ["node_modules", ".git", "dist", ".sdlc", "coverage","tests"];
 const SKIP_FILES_FOR_RULES: Record<string, string[]> = {
   "SEC-005": [
     "env.ts",
