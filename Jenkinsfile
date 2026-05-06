@@ -296,7 +296,7 @@ pipeline {
         // ── 9. Deploy to Dev ─────────────────────────────────────────────────
         stage('Deploy — Dev') {
             when {
-                expression { params.DEPLOY_ENV == 'dev' || params.DEPLOY_ENV == 'staging' || params.DEPLOY_ENV == 'prod' }
+                expression {  return false }
             }
             steps {
                 script {
@@ -314,7 +314,7 @@ pipeline {
         // ── 10. Deploy to Staging ────────────────────────────────────────────
         stage('Deploy — Staging') {
             when {
-                expression { params.DEPLOY_ENV == 'staging' || params.DEPLOY_ENV == 'prod' }
+                expression { return false }
             }
             steps {
                 script {
@@ -338,7 +338,7 @@ pipeline {
         // ── 11. Deploy to Production (Manual Gate) ───────────────────────────
         stage('Deploy — Production') {
             when {
-                expression { params.DEPLOY_ENV == 'prod' }
+                expression { return false }
             }
             steps {
                 script {
