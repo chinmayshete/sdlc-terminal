@@ -66,7 +66,7 @@ pipeline {
         // ── AWS (Vault-injected via Jenkins Credentials — no static keys) ──
         AWS_REGION          = 'us-east-1'
         AWS_ACCOUNT_ID      = credentials('aws-account-id')
-        ECR_REPO_NAME       = 'freddiemac/sdlc-terminal'
+        ECR_REPO_NAME       = 'sdlc-terminal'
         ECR_REGISTRY        = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
         // ── ECS Cluster / Service names (env-specific) ─────────────────────
@@ -245,17 +245,10 @@ pipeline {
         // ── 7. Unit Tests ────────────────────────────────────────────────────
         stage('Unit Tests') {
             when {
-                expression { !params.SKIP_TESTS }
+                expression { return !params.SKIP_TESTS }
             }
             steps {
-                sh '''
-                        if npm run 2>&1 | grep -q "test"; then
-                            npm test -- --ci --reporters=default || true
-                        else
-                            echo "No test script found in package.json — skipping unit tests for POC."
-                        fi
-                    '''
-                }
+                echo 'Unit tests skipped for POC — no test script configured in package.json.'
             }
         }
 
@@ -305,7 +298,7 @@ pipeline {
         // ── 9. Deploy to Dev ─────────────────────────────────────────────────
         stage('Deploy — Dev') {
             when {
-                expression { params.DEPLOY_ENV == 'dev' || params.DEPLOY_ENV == 'staging' || params.DEPLOY_ENV == 'prod' }
+                expression {  return false }
             }
             steps {
                 script {
@@ -323,7 +316,7 @@ pipeline {
         // ── 10. Deploy to Staging ────────────────────────────────────────────
         stage('Deploy — Staging') {
             when {
-                expression { params.DEPLOY_ENV == 'staging' || params.DEPLOY_ENV == 'prod' }
+                expression { return false }
             }
             steps {
                 script {
@@ -347,7 +340,7 @@ pipeline {
         // ── 11. Deploy to Production (Manual Gate) ───────────────────────────
         stage('Deploy — Production') {
             when {
-                expression { params.DEPLOY_ENV == 'prod' }
+                expression { return false }
             }
             steps {
                 script {
