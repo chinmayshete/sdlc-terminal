@@ -13,6 +13,7 @@
     "terminal": "tsx src/index.ts terminal",
     "lint": "eslint src/ --ext .ts --max-warnings 0",
     "lint:fix": "eslint src/ --ext .ts --fix",
+    "format": "prettier --write \"src/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\""
   },
   "dependencies": {
