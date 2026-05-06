@@ -434,78 +434,55 @@ def deployToECS(Map args) {
     def image   = args.image
     def appEnv  = args.env
     def region  = args.region
+    def appName = 'sdlc-terminal' // Explicitly defined for function scope
 
     echo "Deploying ${image} to ECS ${cluster}/${service}..."
 
-    // Write Python to a separate file — avoids Groovy/Python brace conflict
     writeFile file: 'update-task-def.py', text: '''
 import sys, json
-
 td = json.load(sys.stdin)
-
 for c in td.get("containerDefinitions", []):
     if c.get("name") == sys.argv[1]:
         c["image"] = sys.argv[2]
         env_list = [e for e in c.get("environment", []) if e["name"] != "APP_ENV"]
         env_list.append({"name": "APP_ENV", "value": sys.argv[3]})
         c["environment"] = env_list
-
-for key in ["taskDefinitionArn", "revision", "status", "requiresAttributes",
-            "compatibilities", "registeredAt", "registeredBy"]:
+for key in ["taskDefinitionArn", "revision", "status", "requiresAttributes", "compatibilities", "registeredAt", "registeredBy"]:
     td.pop(key, None)
-
 print(json.dumps(td))
 '''
 
     sh """
-        # 1. Get current task definition and update image
-        aws ecs describe-task-definition \
-            --task-definition ${service} \
-            --region ${region} \
-            --query 'taskDefinition' \
-        | python3 update-task-def.py '${APP_NAME}' '${image}' '${appEnv}' > new-task-def.json
+        aws ecs describe-task-definition --task-definition ${service} --region ${region} --query 'taskDefinition' \
+        | python3 update-task-def.py '${appName}' '${image}' '${appEnv}' > new-task-def.json
 
-        # 2. Register new revision
-        NEW_ARN=\$(aws ecs register-task-definition \
-            --region ${region} \
-            --cli-input-json file://new-task-def.json \
-            --query 'taskDefinition.taskDefinitionArn' \
-            --output text)
+        NEW_ARN=\$(aws ecs register-task-definition --region ${region} --cli-input-json file://new-task-def.json --query 'taskDefinition.taskDefinitionArn' --output text)
         echo "New task definition: \$NEW_ARN"
 
-        # 3. Update service to new revision
-        aws ecs update-service \
-            --cluster ${cluster} \
-            --service ${service} \
-            --task-definition \$NEW_ARN \
-            --region ${region}
-
-        # 4. Wait for service stability (up to 10 min)
-        aws ecs wait services-stable \
-            --cluster ${cluster} \
-            --services ${service} \
-            --region ${region}
-
+        aws ecs update-service --cluster ${cluster} --service ${service} --task-definition \$NEW_ARN --region ${region}
+        aws ecs wait services-stable --cluster ${cluster} --services ${service} --region ${region}
         echo "ECS deployment to ${appEnv} complete."
     """
 }
 
 /** Send a Slack notification via webhook */
 def notifySlack(String message, String color) {
+    // Note: Ensure SLACK_WEBHOOK is passed or available
     sh """
-        curl -s -X POST ${SLACK_WEBHOOK} \
+        curl -s -X POST ${env.SLACK_WEBHOOK} \
             -H 'Content-Type: application/json' \
             -d '{"attachments":[{"color":"${color}","text":"${message}","mrkdwn_in":["text"]}]}'
     """
 }
 
-/** Publish to AWS SNS for email/PagerDuty notifications */
+/** Publish to AWS SNS for notifications */
 def notifySNS(String subject, String message) {
     sh """
         aws sns publish \
-            --region ${AWS_REGION} \
-            --topic-arn \${SNS_TOPIC_ARN} \
-            --subject '${subject}: ${APP_NAME} Build #${env.BUILD_NUMBER}' \
+            --region ${env.AWS_REGION} \
+            --topic-arn ${env.SNS_TOPIC_ARN} \
+            --subject '${subject}: sdlc-terminal Build #${env.BUILD_NUMBER}' \
             --message '${message}' || echo "SNS notify failed (non-fatal)"
     """
 }
+// Note: Ensure there are NO extra brackets after this line.
