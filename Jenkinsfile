@@ -296,8 +296,7 @@ pipeline {
         // ── 9. Deploy to Dev ─────────────────────────────────────────────────
         stage('Deploy — Dev') {
             when {
-                expression {  return true }
-            }
+                expression { params.DEPLOY_ENV == 'dev' || params.DEPLOY_ENV == 'staging' || params.DEPLOY_ENV == 'prod' }
             steps {
                 script {
                     deployToECS(
