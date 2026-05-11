@@ -1,8 +1,8 @@
-# Freddie Mac Enterprise SDLC Assistant POC
+# Nexus — Enterprise AI SDLC Terminal Assistant
 
-An enterprise-grade, local-first terminal SDLC (Software Development Life Cycle) assistant built with Node.js and TypeScript. 
+An intelligent, enterprise-grade CLI assistant that accelerates the full Software Development Lifecycle — from ticket planning through secure deployment — while enforcing strict engineering standards at every step.
 
-This POC demonstrates an intelligent CLI that helps developers plan, write code, and execute DevOps tasks while strictly adhering to Freddie Mac's enterprise standards (Code Quality, Vault Secrets, GitFlow, Jenkins CI/CD, and NFR Code Scanning).
+Nexus represents a central hub where all development modes (NLP, Git, DevOps, Security) meet to automate and govern the local development environment.
 
 ---
 
@@ -107,7 +107,7 @@ Start the interactive session:
 npm run terminal
 ```
 
-Once inside the `sdlc >` prompt, you have access to three modes:
+Once inside the `nexus >` prompt, you have access to three modes:
 
 #### 1. Command Mode (Default)
 Manage tickets and workflow states.
