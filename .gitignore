@@ -10,7 +10,14 @@ dist/
 .env.*
 !.env.example
 
+# State (Tracked to persist ticket progress in demo)
+# .sdlc/  <-- Uncomment to ignore local state if desired
 
+# System Files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
 
 # Logs & Temp
 *.log
