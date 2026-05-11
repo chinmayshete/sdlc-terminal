@@ -5,12 +5,13 @@ const MAX_WIDTH = 94;
 
 export function renderBanner(): string {
   const lines = [
-    "  _____ ____  _      _____ ",
-    " / ____|  _ \\| |    / ____|",
-    "| (___ | | | | |   | |     ",
-    " \\___ \\| | | | |   | |     ",
-    " ____) | |_| | |___| |____ ",
-    "|_____/|____/|______\\_____|",
+    "  _   _ _______   __ _   _  ____  ",
+    " | \\ | |  ____| \\ \\/ / | | |/ ___| ",
+    " |  \\| | |__     \\  /  | | | \\___ \\ ",
+    " | . ` |  __|    /  \\  | | |  ___ \\ ",
+    " | |\\  | |____  / /\\ \\ | |_| |/____/ ",
+    " |_| \\_|______|/_/  \\_\\ \\___/|____/  ", 
+    "",
   ];
 
   const width = Math.max(54, Math.min(terminalWidth(), 54));
@@ -24,13 +25,14 @@ export function renderBanner(): string {
         "#3b82f6",
         "#6366f1",
         "#8b5cf6",
+        "#d946ef",
       ];
-      return chalk.hex(colors[index])(line);
+      return chalk.hex(colors[index % colors.length])(line);
     })
     .join("\n");
 
   const subtitle = chalk.hex("#facc15")(
-    "AI SDLC terminal for local repo automation",
+    "NEXUS: AI-powered SDLC terminal assistant",
   );
   return `${border}\n${art}\n${subtitle}\n${border}`;
 }

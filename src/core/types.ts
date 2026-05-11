@@ -42,7 +42,7 @@ export interface ExecuteResult {
 
 export interface RepoStatus {
   tickets: TicketStatusEntry[];
-  currentMode: "command" | "nlp" | "devops";
+  currentMode: "command" | "nlp" | "devops" | "git" | "security";
   ai: {
     configured: boolean;
     mode: "azure" | "mock";

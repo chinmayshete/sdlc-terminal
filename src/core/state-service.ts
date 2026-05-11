@@ -16,8 +16,9 @@ export class StateService {
     const state = await this.readState();
 
     return tickets.map((ticket) => {
+      const canonicalId = ticket.id.toUpperCase();
       return (
-        state.tickets[ticket.id] ?? {
+        state.tickets[canonicalId] ?? {
           ticketId: ticket.id,
           status: "TODO",
           updatedAt: new Date(0).toISOString(),
@@ -32,21 +33,22 @@ export class StateService {
     note?: string,
   ): Promise<TicketStatusEntry> {
     const state = await this.readState();
+    const canonicalId = ticketId.toUpperCase();
     const entry: TicketStatusEntry = {
-      ticketId,
+      ticketId: canonicalId,
       status,
       updatedAt: new Date().toISOString(),
       note,
     };
 
-    state.tickets[ticketId] = entry;
+    state.tickets[canonicalId] = entry;
     await this.writeState(state);
     return entry;
   }
 
   async resetTicketStatus(ticketId: string): Promise<void> {
     const state = await this.readState();
-    delete state.tickets[ticketId];
+    delete state.tickets[ticketId.toUpperCase()];
     await this.writeState(state);
   }
 

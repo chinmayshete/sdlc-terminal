@@ -5,8 +5,11 @@ import { FileSnapshot, NlpChatTurn, TicketStatusEntry } from "../core/types";
 import { accent, danger, panel, renderBanner, warning } from "../utils/theme";
 import { formatScanReport } from "../utils/code-scanner";
 import { formatPipelineInfo } from "../utils/cicd";
+import { GitIntent } from "../utils/git-nl-parser";
+import { DevOpsIntent } from "../utils/devops-nl-parser";
+import { SecurityIntent } from "../utils/security-nl-parser";
 
-type TerminalMode = "command" | "nlp" | "devops";
+type TerminalMode = "command" | "nlp" | "devops" | "git" | "security";
 
 interface NlpSessionState {
   history: NlpChatTurn[];
@@ -18,9 +21,9 @@ export async function runTerminal(orchestrator: Orchestrator): Promise<void> {
   console.log(renderBanner());
   console.log(
     panel("Quick Start", [
-      "Commands: tickets | plan <id> | execute <id> | status | ai | security | nlp | devops | push <id> | help | exit",
-      "NLP mode is free chat with repo awareness and editing tools.",
-      "Execute updates ticket state only. Push is explicit and asks for permission in-terminal.",
+      "Commands: tickets | plan <id> | execute <id> | status | ai",
+      "Modes: nlp | devops | git | security",
+      "Push: push <id> | help | exit",
     ]),
   );
 
@@ -63,6 +66,16 @@ export async function runTerminal(orchestrator: Orchestrator): Promise<void> {
         }
       } else if (mode === "devops") {
         const next = await handleDevopsInput(orchestrator, reader, input);
+        if (next.exitMode) {
+          mode = "command";
+        }
+      } else if (mode === "git") {
+        const next = await handleGitInput(orchestrator, reader, input);
+        if (next.exitMode) {
+          mode = "command";
+        }
+      } else if (mode === "security") {
+        const next = await handleSecurityInput(orchestrator, reader, input);
         if (next.exitMode) {
           mode = "command";
         }
@@ -175,9 +188,17 @@ async function handleCommandInput(
       return { mode: "command", closeTerminal: false };
     }
     case "security": {
-      const scan = await runSecurityScan(orchestrator);
-      console.log(panel("Security Scan", scan));
-      return { mode: "command", closeTerminal: false };
+      console.log(
+        panel("Security Mode", [
+          "Code scanning, secrets, vault, compliance & infrastructure.",
+          "Commands: scan | secrets | vault | compliance | docker",
+          "  terraform | audit | licenses | dashboard | posture",
+          'Or type naturally: "check for secrets",',
+          '  "is the Dockerfile secure", "how secure are we"',
+          'Type "help" for full reference, "exit" to leave.',
+        ]),
+      );
+      return { mode: "security", closeTerminal: false };
     }
     case "nlp": {
       console.log(
@@ -193,11 +214,29 @@ async function handleCommandInput(
     case "devops": {
       console.log(
         panel("DevOps Mode", [
-          "Analyze codebase and run ops-focused commands.",
-          'Use "summary", "scan", "cicd", "merge <ticketId>", "rollback", "changed", "push <ticketId>", or "exit".',
+          "CI/CD, Security, Docker, Terraform, Env & Deployment.",
+          "Commands: cicd | scan | docker | terraform | env | deps",
+          "  deploy | health | pr check | summary | changed",
+          'Or type naturally: "validate the Jenkinsfile",',
+          '  "check for vulnerabilities", "is everything healthy"',
+          'Type "help" for full reference, "exit" to leave.',
         ]),
       );
       return { mode: "devops", closeTerminal: false };
+    }
+    case "git": {
+      console.log(
+        panel("Git Mode", [
+          "Full Git operations with natural language support.",
+          "Commands: status | log | diff | add | commit | branch,",
+          "  checkout | pull | push | stash | tag | remote | blame,",
+          "  cherry-pick | reset | merge | fetch | show",
+          'Or type naturally: "show me what changed",',
+          '  "commit everything with message fix auth bug"',
+          'Type "help" for full reference, "exit" to leave.',
+        ]),
+      );
+      return { mode: "git", closeTerminal: false };
     }
     case "push": {
       const ticketId = args[0];
@@ -227,9 +266,10 @@ async function handleCommandInput(
           "execute AUTH-101   Generate code and tests locally",
           "status             Show ticket statuses",
           "ai                 Verify Azure or mock AI mode",
-          "security           Show vulnerability scan workflow",
+          "security           Enter Security assistant mode",
           "nlp                Enter free-form repo chat mode",
           "devops             Enter DevOps assistant mode",
+          "git                Enter Git operations mode",
           "push AUTH-101      Push only after in-terminal approval",
           "reset AUTH-101     Reset one ticket status back to TODO",
           "reset-all          Reset every tracked ticket status",
@@ -394,91 +434,134 @@ async function handleDevopsInput(
   reader: readline.Interface,
   input: string,
 ): Promise<{ exitMode: boolean }> {
-  const [command, ...args] = input.split(/\s+/);
+  const normalized = input.toLowerCase().trim();
 
-  switch (command) {
-    case "summary": {
-      console.log(panel("DevOps Summary", await orchestrator.devopsSummary()));
-      return { exitMode: false };
+  if (normalized === "exit" || normalized === "quit") {
+    console.log(accent("Leaving DevOps mode."));
+    return { exitMode: true };
+  }
+
+  if (normalized === "help") {
+    console.log(panel("DevOps Help", orchestrator.getDevOpsHelp()));
+    return { exitMode: false };
+  }
+
+  // Parse intent — tries rule-based first, then LLM fallback
+  const intent = await orchestrator.parseDevOpsNaturalLanguage(input);
+
+  if (intent.command === "unknown") {
+    console.log(
+      danger(
+        `Could not parse DevOps command. Type "help" for available commands.`,
+      ),
+    );
+    return { exitMode: false };
+  }
+
+  const result = await executeDevOpsIntent(orchestrator, reader, intent);
+
+  if (typeof result === "string") {
+    console.log(panel("DevOps", [result]));
+  } else {
+    console.log(panel("DevOps", result));
+  }
+
+  return { exitMode: false };
+}
+
+async function executeDevOpsIntent(
+  orchestrator: Orchestrator,
+  reader: readline.Interface,
+  intent: DevOpsIntent,
+): Promise<string | string[]> {
+  switch (intent.command) {
+    // CI/CD
+    case "cicd": return orchestrator.getDevOpsCicd();
+    case "jenkins-validate": return orchestrator.getDevOpsJenkinsValidate();
+    case "jenkins-stages": return orchestrator.getDevOpsJenkinsStages();
+    case "jenkins-params": return orchestrator.getDevOpsJenkinsParams();
+    case "actions": return orchestrator.getDevOpsActions();
+    case "actions-validate": return orchestrator.getDevOpsActionsValidate();
+    case "pipeline-health": return orchestrator.getDevOpsPipelineHealth();
+
+    // Security
+    case "scan": return orchestrator.getDevOpsScan();
+    case "scan-errors": return orchestrator.getDevOpsScanErrors();
+    case "secrets-check": return orchestrator.getDevOpsSecretsCheck();
+
+    // Docker
+    case "docker-info": return orchestrator.getDevOpsDockerInfo();
+    case "docker-stages": return orchestrator.getDevOpsDockerStages();
+    case "docker-validate": return orchestrator.getDevOpsDockerValidate();
+
+    // Terraform
+    case "terraform-info": return orchestrator.getDevOpsTerraformInfo();
+    case "infra-resources": return orchestrator.getDevOpsInfraResources();
+
+    // Environment
+    case "env-show": return orchestrator.getDevOpsEnvShow();
+    case "env-compare": return orchestrator.getDevOpsEnvCompare();
+    case "env-validate": return orchestrator.getDevOpsEnvValidate();
+
+    // Dependencies
+    case "deps-audit": return orchestrator.getDevOpsDepsAudit();
+    case "deps-check": return orchestrator.getDevOpsDepsCheck();
+    case "deps-licenses": return orchestrator.getDevOpsDepsLicenses();
+
+    // Deployment
+    case "deploy-status": return orchestrator.getDevOpsDeployStatus();
+    case "deploy-check": {
+      const env = intent.args[0];
+      if (!env) return "Usage: deploy check <env> (dev/staging/prod)";
+      return orchestrator.getDevOpsDeployCheck(env);
     }
-    case "security":
-    case "scan": {
-      console.log(panel("Security Scan", await runSecurityScan(orchestrator)));
-      return { exitMode: false };
+    case "release": {
+      const ver = intent.args[0];
+      if (!ver) return "Usage: release <version>";
+      const proceed = await askYesNo(reader, `Create release branch for ${ver}? (yes/no) `);
+      if (!proceed) return "Release cancelled.";
+      return orchestrator.runDevOpsRelease(ver);
     }
-    case "cicd": {
-      const info = await orchestrator.getCicdPipeline();
-      console.log(panel("Jenkins Pipeline", formatPipelineInfo(info)));
-      return { exitMode: false };
-    }
-    case "changed": {
-      const changedFiles = await orchestrator.changedFiles();
-      console.log(
-        panel(
-          "Changed Files",
-          changedFiles.length > 0 ? changedFiles : ["No changed files."],
-        ),
-      );
-      return { exitMode: false };
+    case "hotfix": {
+      const id = intent.args[0];
+      if (!id) return "Usage: hotfix <ticketId>";
+      const proceed = await askYesNo(reader, `Create hotfix branch for ${id}? (yes/no) `);
+      if (!proceed) return "Hotfix cancelled.";
+      return orchestrator.runDevOpsHotfix(id);
     }
     case "merge": {
-      const ticketId = args[0];
-      if (!ticketId) {
-        console.log(warning("Usage: merge <ticketId>"));
-        return { exitMode: false };
-      }
-      const result = await orchestrator.mergeFeature(ticketId);
-      console.log(panel("Merge Result", [result]));
-      return { exitMode: false };
+      const ticketId = intent.args[0];
+      if (!ticketId) return "Usage: merge <ticketId>";
+      const proceed = await askYesNo(reader, `Merge feature/${ticketId} to develop? (yes/no) `);
+      if (!proceed) return "Merge cancelled.";
+      return orchestrator.mergeFeature(ticketId);
     }
     case "rollback": {
-      const target = args[0];
-      const result = await orchestrator.rollback(target);
-      console.log(panel("Rollback Result", [result]));
-      return { exitMode: false };
+      const target = intent.args[0];
+      const label = target ? `commit ${target.slice(0, 8)}` : "last commit";
+      const proceed = await askYesNo(reader, `Rollback ${label}? (yes/no) `);
+      if (!proceed) return "Rollback cancelled.";
+      return orchestrator.rollback(target);
     }
     case "push": {
-      const ticketId = args[0];
-      if (!ticketId) {
-        console.log(warning("Usage: push <ticketId>"));
-        return { exitMode: false };
-      }
-
-      const allowed = await askYesNo(
-        reader,
-        `Push ${ticketId} to git remote now? (yes/no) `,
-      );
-      if (!allowed) {
-        console.log(warning("Push cancelled."));
-        return { exitMode: false };
-      }
-
-      const result = await orchestrator.push(ticketId);
-      console.log(panel("Push Result", [result]));
-      return { exitMode: false };
+      const ticketId = intent.args[0];
+      if (!ticketId) return "Usage: push <ticketId>";
+      const proceed = await askYesNo(reader, `Push ${ticketId} to remote? (yes/no) `);
+      if (!proceed) return "Push cancelled.";
+      return orchestrator.push(ticketId);
     }
-    case "help": {
-      console.log(
-        panel("DevOps Help", [
-          "summary            View AI health and changed files",
-          "scan               Run the NFR code security scanner",
-          "cicd               View the Jenkins pipeline stages",
-          "changed            View locally modified files",
-          "merge <ticketId>   Merge a feature branch using GitFlow standards",
-          "rollback           Revert the last commit safely",
-          "push <ticketId>    Push a branch to remote",
-          "exit               Leave DevOps mode",
-        ]),
-      );
-      return { exitMode: false };
+
+    // Health & Summary
+    case "summary": return orchestrator.getDevOpsFullSummary();
+    case "health": return orchestrator.getDevOpsHealth();
+    case "changed": {
+      const files = await orchestrator.changedFiles();
+      return files.length > 0 ? files : ["No changed files."];
     }
-    case "exit":
-    case "quit":
-      console.log(accent("Leaving DevOps mode."));
-      return { exitMode: true };
+    case "pr-check": return orchestrator.getDevOpsPrCheck();
+
     default:
-      console.log(danger(`Unknown DevOps command: ${command}`));
-      return { exitMode: false };
+      return `Unknown DevOps command: ${intent.command}`;
   }
 }
 
@@ -543,7 +626,17 @@ function updatePrompt(reader: readline.Interface, mode: TerminalMode): void {
     return;
   }
 
-  reader.setPrompt(accent("sdlc > "));
+  if (mode === "git") {
+    reader.setPrompt(accent("git > "));
+    return;
+  }
+
+  if (mode === "security") {
+    reader.setPrompt(accent("security > "));
+    return;
+  }
+
+  reader.setPrompt(accent("nexus > "));
 }
 
 function askYesNo(
@@ -561,4 +654,303 @@ function looksLikeFilePath(value: string): boolean {
   return (
     value.includes("/") || value.includes("\\") || /\.[a-z0-9]+$/i.test(value)
   );
+}
+
+// ---------------------------------------------------------------------------
+// Git Mode Handler
+// ---------------------------------------------------------------------------
+
+async function handleGitInput(
+  orchestrator: Orchestrator,
+  reader: readline.Interface,
+  input: string,
+): Promise<{ exitMode: boolean }> {
+  const normalized = input.toLowerCase().trim();
+
+  if (normalized === "exit" || normalized === "quit") {
+    console.log(accent("Leaving Git mode."));
+    return { exitMode: true };
+  }
+
+  if (normalized === "help") {
+    console.log(panel("Git Help", orchestrator.getGitHelp()));
+    return { exitMode: false };
+  }
+
+  // Parse intent — tries rule-based first, then LLM fallback
+  const intent = await orchestrator.parseGitNaturalLanguage(input);
+
+  if (intent.command === "unknown") {
+    console.log(
+      danger(
+        `Could not parse git command. Type "help" for available commands.`,
+      ),
+    );
+    return { exitMode: false };
+  }
+
+  // Route the resolved intent to the appropriate operation
+  const result = await executeGitIntent(orchestrator, reader, intent);
+
+  if (typeof result === "string") {
+    console.log(panel("Git", [result]));
+  } else {
+    console.log(panel("Git", result));
+  }
+
+  return { exitMode: false };
+}
+
+async function executeGitIntent(
+  orchestrator: Orchestrator,
+  reader: readline.Interface,
+  intent: GitIntent,
+): Promise<string | string[]> {
+  switch (intent.command) {
+    case "status":
+      return orchestrator.getGitStatus();
+
+    case "log": {
+      const count = intent.args[0] ? parseInt(intent.args[0], 10) : undefined;
+      return orchestrator.getGitLog(count);
+    }
+
+    case "diff": {
+      const file = intent.args[0];
+      return orchestrator.getGitDiff(file);
+    }
+
+    case "diff-staged":
+      return orchestrator.getGitDiffStaged();
+
+    case "add": {
+      const file = intent.args[0];
+      if (!file) return "Usage: add <file>";
+      return orchestrator.runGitAdd(file);
+    }
+
+    case "add-all":
+      return orchestrator.runGitAddAll();
+
+    case "commit": {
+      const msg = intent.args[0];
+      if (!msg) return "Usage: commit <message>";
+      const proceed = await askYesNo(
+        reader,
+        `Commit with message "${msg}"? (yes/no) `,
+      );
+      if (!proceed) return "Commit cancelled.";
+      return orchestrator.runGitCommit(msg);
+    }
+
+    case "commit-all": {
+      const msg = intent.args[0];
+      if (!msg) return "Usage: commit -a <message>";
+      const proceed = await askYesNo(
+        reader,
+        `Stage all & commit with message "${msg}"? (yes/no) `,
+      );
+      if (!proceed) return "Commit cancelled.";
+      return orchestrator.runGitCommitAll(msg);
+    }
+
+    case "branch-list":
+      return orchestrator.getGitBranches();
+
+    case "branch-create": {
+      const name = intent.args[0];
+      if (!name) return "Usage: branch <name>";
+      return orchestrator.runGitCreateBranch(name);
+    }
+
+    case "branch-delete": {
+      const name = intent.args[0];
+      if (!name) return "Usage: delete branch <name>";
+      const proceed = await askYesNo(
+        reader,
+        `Delete branch '${name}'? (yes/no) `,
+      );
+      if (!proceed) return "Branch delete cancelled.";
+      return orchestrator.runGitDeleteBranch(name);
+    }
+
+    case "checkout": {
+      const name = intent.args[0];
+      if (!name) return "Usage: checkout <branch>";
+      return orchestrator.runGitCheckout(name);
+    }
+
+    case "pull":
+      return orchestrator.runGitPull();
+
+    case "push": {
+      const branch = intent.args[0];
+      const label = branch ? `'${branch}'` : "current branch";
+      const proceed = await askYesNo(
+        reader,
+        `Push ${label} to remote? (yes/no) `,
+      );
+      if (!proceed) return "Push cancelled.";
+      return orchestrator.runGitPush(branch);
+    }
+
+    case "fetch":
+      return orchestrator.runGitFetch();
+
+    case "stash":
+      return orchestrator.runGitStash();
+
+    case "stash-pop":
+      return orchestrator.runGitStashPop();
+
+    case "stash-list":
+      return orchestrator.getGitStashList();
+
+    case "tag": {
+      const name = intent.args[0];
+      if (!name) return "Usage: tag <name>";
+      return orchestrator.runGitTag(name);
+    }
+
+    case "tag-list":
+      return orchestrator.getGitTags();
+
+    case "remote":
+      return orchestrator.getGitRemotes();
+
+    case "unstage": {
+      const file = intent.args[0];
+      if (!file) return "Usage: reset <file>";
+      return orchestrator.runGitUnstage(file);
+    }
+
+    case "cherry-pick": {
+      const sha = intent.args[0];
+      if (!sha) return "Usage: cherry-pick <sha>";
+      const proceed = await askYesNo(
+        reader,
+        `Cherry-pick commit ${sha.slice(0, 8)}? (yes/no) `,
+      );
+      if (!proceed) return "Cherry-pick cancelled.";
+      return orchestrator.runGitCherryPick(sha);
+    }
+
+    case "blame": {
+      const file = intent.args[0];
+      if (!file) return "Usage: blame <file>";
+      return orchestrator.getGitBlame(file);
+    }
+
+    case "show": {
+      const sha = intent.args[0];
+      if (!sha) return "Usage: show <sha>";
+      return orchestrator.getGitShowCommit(sha);
+    }
+
+    case "merge": {
+      const branch = intent.args[0];
+      if (!branch) return "Usage: merge <branch>";
+      const proceed = await askYesNo(
+        reader,
+        `Merge '${branch}' into current branch? (yes/no) `,
+      );
+      if (!proceed) return "Merge cancelled.";
+      return orchestrator.runGitMerge(branch);
+    }
+
+    default:
+      return `Unknown git command: ${intent.command}`;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Security Mode Handler
+// ---------------------------------------------------------------------------
+
+async function handleSecurityInput(
+  orchestrator: Orchestrator,
+  reader: readline.Interface,
+  input: string,
+): Promise<{ exitMode: boolean }> {
+  const normalized = input.toLowerCase().trim();
+
+  if (normalized === "exit" || normalized === "quit") {
+    console.log(accent("Leaving Security mode."));
+    return { exitMode: true };
+  }
+
+  if (normalized === "help") {
+    console.log(panel("Security Help", orchestrator.getSecurityHelp()));
+    return { exitMode: false };
+  }
+
+  const intent = await orchestrator.parseSecurityNaturalLanguage(input);
+
+  if (intent.command === "unknown") {
+    console.log(
+      danger(
+        `Could not parse security command. Type "help" for available commands.`,
+      ),
+    );
+    return { exitMode: false };
+  }
+
+  const result = await executeSecurityIntent(orchestrator, reader, intent);
+
+  if (typeof result === "string") {
+    console.log(panel("Security", [result]));
+  } else {
+    console.log(panel("Security", result));
+  }
+
+  return { exitMode: false };
+}
+
+async function executeSecurityIntent(
+  orchestrator: Orchestrator,
+  _reader: readline.Interface,
+  intent: SecurityIntent,
+): Promise<string | string[]> {
+  switch (intent.command) {
+    // Code Scanning
+    case "scan": return orchestrator.getSecurityScan();
+    case "scan-errors": return orchestrator.getSecurityScanErrors();
+    case "scan-warnings": return orchestrator.getSecurityScanWarnings();
+    case "scan-summary": return orchestrator.getSecurityScanSummary();
+    case "scan-file": {
+      const filePath = intent.args[0];
+      if (!filePath) return "Usage: scan file <path>";
+      return orchestrator.getSecurityScanFile(filePath);
+    }
+    case "rules": return orchestrator.getSecurityScanRules();
+
+    // Secret Detection
+    case "secrets": return orchestrator.getSecuritySecrets();
+    case "env-audit": return orchestrator.getSecurityEnvAudit();
+    case "sensitive-fields": return orchestrator.getSecuritySensitiveFields();
+
+    // Dependency Security
+    case "deps-audit": return orchestrator.getSecurityDepsAudit();
+    case "licenses": return orchestrator.getSecurityLicenses();
+
+    // Vault & Config
+    case "vault": return orchestrator.getSecurityVaultStatus();
+    case "config-security": return orchestrator.getSecurityConfigValidation();
+
+    // Compliance & Policy
+    case "compliance": return orchestrator.getSecurityCompliance();
+    case "gitflow": return orchestrator.getSecurityGitFlowPolicy();
+    case "codeowners": return orchestrator.getSecurityCodeOwners();
+
+    // Infrastructure Security
+    case "docker-security": return orchestrator.getSecurityDocker();
+    case "terraform-security": return orchestrator.getSecurityTerraform();
+
+    // Dashboard
+    case "dashboard": return orchestrator.getSecurityDashboard();
+    case "posture": return orchestrator.getSecurityPosture();
+
+    default:
+      return `Unknown security command: ${intent.command}`;
+  }
 }

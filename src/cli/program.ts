@@ -10,8 +10,8 @@ export function buildCli(): Command {
   const orchestrator = createOrchestrator();
 
   program
-    .name("sdlc")
-    .description("Minimal SDLC assistant CLI")
+    .name("nexus")
+    .description("Nexus: AI-powered SDLC terminal assistant")
     .version("0.1.0");
 
   program
@@ -145,6 +145,103 @@ export function buildCli(): Command {
     .action(async () => {
       const summary = await orchestrator.getEnvironmentConfig();
       console.log(summary.join("\n"));
+    });
+
+  program
+    .command("git-status")
+    .description("Show git working tree status")
+    .action(async () => {
+      const status = await orchestrator.getGitStatus();
+      console.log(status.join("\n"));
+    });
+
+  program
+    .command("git-log")
+    .description("Show recent git commits")
+    .argument("[count]", "Number of commits to show", "10")
+    .action(async (count: string) => {
+      const log = await orchestrator.getGitLog(parseInt(count, 10));
+      console.log(log.join("\n"));
+    });
+
+  program
+    .command("git-branches")
+    .description("List local git branches")
+    .action(async () => {
+      const branches = await orchestrator.getGitBranches();
+      console.log(branches.join("\n"));
+    });
+
+  program
+    .command("pipeline")
+    .description("Show Jenkins CI/CD pipeline overview")
+    .action(async () => {
+      const info = await orchestrator.getDevOpsCicd();
+      console.log(info.join("\n"));
+    });
+
+  program
+    .command("docker-info")
+    .description("Analyze and display Dockerfile metadata")
+    .action(async () => {
+      const info = await orchestrator.getDevOpsDockerInfo();
+      console.log(info.join("\n"));
+    });
+
+  program
+    .command("infra")
+    .description("Show Terraform infrastructure resources")
+    .action(async () => {
+      const resources = await orchestrator.getDevOpsInfraResources();
+      console.log(resources.join("\n"));
+    });
+
+  program
+    .command("health")
+    .description("Full system health check (AI, Git, Config, Pipeline)")
+    .action(async () => {
+      const health = await orchestrator.getDevOpsHealth();
+      console.log(health.join("\n"));
+    });
+
+  program
+    .command("pr-check")
+    .description("Run PR readiness check (branch, commit, scan)")
+    .action(async () => {
+      const check = await orchestrator.getDevOpsPrCheck();
+      console.log(check.join("\n"));
+    });
+
+  program
+    .command("security-scan")
+    .description("Run full NFR security scan on the codebase")
+    .action(async () => {
+      const scan = await orchestrator.getSecurityScan();
+      console.log(scan.join("\n"));
+    });
+
+  program
+    .command("secrets")
+    .description("Check for hardcoded secrets in source code")
+    .action(async () => {
+      const result = await orchestrator.getSecuritySecrets();
+      console.log(result.join("\n"));
+    });
+
+  program
+    .command("compliance")
+    .description("Run enterprise compliance check")
+    .action(async () => {
+      const result = await orchestrator.getSecurityCompliance();
+      console.log(result.join("\n"));
+    });
+
+  program
+    .command("security-dashboard")
+    .description("Show full security dashboard")
+    .action(async () => {
+      const result = await orchestrator.getSecurityDashboard();
+      console.log(result.join("\n"));
     });
 
   program

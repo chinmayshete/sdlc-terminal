@@ -1,10 +1,10 @@
 {
-  "name": "sdlc-cli",
+  "name": "nexus-cli",
   "version": "0.1.0",
-  "description": "Minimal terminal-based SDLC assistant CLI MVP",
+  "description": "Nexus: AI-powered SDLC terminal assistant",
   "main": "dist/index.js",
   "bin": {
-    "sdlc": "dist/index.js"
+    "nexus": "dist/index.js"
   },
   "scripts": {
     "build": "tsc",
