@@ -49,4 +49,4 @@ When pitching to Freddie Mac, position **Claude Code** as a "tool for the develo
 | **Context** | Files in the editor | Tickets, CI/CD status, and Infra files |
 | **Governance** | None | Enforces GitFlow and CODEOWNERS policies |
 
-**Pro Tip:** In your demo, emphasize the **`nexus compliance`** command. It’s the one feature that no other generic AI tool has—the ability to tell a developer, "Your code is good, but it's not ready for Freddie Mac production yet."        
+**Pro Tip:** In your demo, emphasize the **`nexus compliance`** command. It’s the one feature that no other generic AI tool has—the ability to tell a developer, "Your code is good, but it's not ready for Freddie Mac production yet."
