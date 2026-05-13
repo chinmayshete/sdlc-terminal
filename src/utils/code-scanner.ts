@@ -7,9 +7,11 @@
 
 import { promises as fs } from "fs";
 import path from "path";
+import { performAiVulnerabilityScan } from "./llm";
 
 export interface ScanFinding {
   ruleId: string;
+  category: string;
   description: string;
   severity: "ERROR" | "WARNING" | "INFO";
   filePath: string;
@@ -36,6 +38,11 @@ interface ScanRule {
   remediation: string;
 }
 
+/**
+ * @deprecated These hardcoded regex rules are retained as a deterministic 
+ * baseline / fallback scanner. In a production environment, use actual 
+ * tools like Semgrep or Gitleaks for primary scanning, followed by AI analysis.
+ */
 const SCAN_RULES: ScanRule[] = [
   {
     id: "SEC-001",
@@ -148,31 +155,38 @@ export async function runCodeScan(scanDir: string): Promise<ScanReport> {
 
   for (const filePath of files) {
     const content = await fs.readFile(filePath, "utf8");
+    
+    // PERFORM AI VULNERABILITY SCAN (REPLACES REGEX RULES)
+    const aiFindings = await performAiVulnerabilityScan(filePath, content);
     const lines = content.split(/\r?\n/);
-    const fileName = path.basename(filePath);
 
-    for (const rule of SCAN_RULES) {
-      const skipFiles = SKIP_FILES_FOR_RULES[rule.id];
-      if (skipFiles && skipFiles.includes(fileName)) continue;
+    for (const f of aiFindings) {
+      let correctedLineNumber = f.lineNumber || 0;
 
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        const trimmed = line.trim();
-        if (trimmed.startsWith("//") || trimmed.startsWith("*")) continue;
-
-        const matches = line.matchAll(rule.pattern);
-        for (const match of matches) {
-          findings.push({
-            ruleId: rule.id,
-            description: rule.description,
-            severity: rule.severity,
-            filePath: filePath.replace(/\\/g, "/"),
-            lineNumber: i + 1,
-            matchedContent: redactMatch(match[0]),
-            remediation: rule.remediation,
-          });
+      // AI often miscounts line numbers. We verify and auto-correct here.
+      if (f.matchedContent && f.matchedContent !== "N/A") {
+        const expectedLine = lines[correctedLineNumber - 1] || "";
+        if (!expectedLine.includes(f.matchedContent)) {
+          // The reported line is wrong. Search for the actual content in the file.
+          const actualIndex = lines.findIndex((l) =>
+            l.includes(f.matchedContent),
+          );
+          if (actualIndex !== -1) {
+            correctedLineNumber = actualIndex + 1;
+          }
         }
       }
+
+      findings.push({
+        ruleId: f.ruleId || "AI-GENERIC",
+        category: f.category || "General Security",
+        description: f.description || "No description provided",
+        severity: f.severity || "INFO",
+        filePath: filePath.replace(/\\/g, "/"),
+        lineNumber: correctedLineNumber,
+        matchedContent: f.matchedContent || "N/A",
+        remediation: f.remediation || "Review findings with a security expert.",
+      });
     }
   }
 
@@ -200,18 +214,20 @@ export function formatScanReport(report: ScanReport): string[] {
     return lines;
   }
 
-  const groups: [string, ScanFinding[]][] = [
-    ["ERRORS", report.findings.filter((f) => f.severity === "ERROR")],
-    ["WARNINGS", report.findings.filter((f) => f.severity === "WARNING")],
-    ["INFO", report.findings.filter((f) => f.severity === "INFO")],
-  ];
+  // Get unique categories and sort them
+  const categories = Array.from(
+    new Set(report.findings.map((f) => f.category)),
+  ).sort();
 
-  for (const [label, items] of groups) {
+  for (const cat of categories) {
+    const items = report.findings.filter((f) => f.category === cat);
     if (items.length === 0) continue;
-    lines.push(`── ${label} ${"─".repeat(44 - label.length)}`);
+
+    lines.push(`── ${cat.toUpperCase()} ${"─".repeat(Math.max(0, 44 - cat.length))}`);
     for (const f of items) {
       const shortPath = f.filePath.split("/").slice(-3).join("/");
-      lines.push(`  [${f.ruleId}] ${f.description}`);
+      const severityIcon = f.severity === "ERROR" ? "✗" : "⚠";
+      lines.push(`  [${f.ruleId}] ${severityIcon} ${f.description}`);
       lines.push(`    File: ${shortPath}:${f.lineNumber}`);
       lines.push(`    Match: ${f.matchedContent}`);
       lines.push(`    Fix: ${f.remediation}`);
@@ -219,7 +235,7 @@ export function formatScanReport(report: ScanReport): string[] {
     }
   }
 
-  lines.push("Remediation: address ERROR findings before merge.");
+  lines.push("Remediation: Address findings based on severity and category risk.");
   return lines;
 }
 

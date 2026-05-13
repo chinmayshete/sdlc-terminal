@@ -8,6 +8,7 @@ const readline_1 = __importDefault(require("readline"));
 const ticket_catalog_1 = require("../core/ticket-catalog");
 const theme_1 = require("../utils/theme");
 const code_scanner_1 = require("../utils/code-scanner");
+const spinner_1 = require("../utils/spinner");
 async function runTerminal(orchestrator) {
     console.log((0, theme_1.renderBanner)());
     console.log((0, theme_1.panel)("Quick Start", [
@@ -39,7 +40,7 @@ async function runTerminal(orchestrator) {
         let shouldClose = false;
         try {
             if (mode === "nlp") {
-                const next = await handleNlpInput(orchestrator, input, nlpState);
+                const next = await (0, spinner_1.withSpinner)("Analyzing request...", () => handleNlpInput(orchestrator, input, nlpState));
                 nlpState = next.state;
                 if (next.exitMode) {
                     mode = "command";
@@ -47,25 +48,25 @@ async function runTerminal(orchestrator) {
                 }
             }
             else if (mode === "devops") {
-                const next = await handleDevopsInput(orchestrator, reader, input);
+                const next = await (0, spinner_1.withSpinner)("Executing DevOps command...", () => handleDevopsInput(orchestrator, reader, input));
                 if (next.exitMode) {
                     mode = "command";
                 }
             }
             else if (mode === "git") {
-                const next = await handleGitInput(orchestrator, reader, input);
+                const next = await (0, spinner_1.withSpinner)("Running git operation...", () => handleGitInput(orchestrator, reader, input));
                 if (next.exitMode) {
                     mode = "command";
                 }
             }
             else if (mode === "security") {
-                const next = await handleSecurityInput(orchestrator, reader, input);
+                const next = await (0, spinner_1.withSpinner)("Analyzing security...", () => handleSecurityInput(orchestrator, reader, input));
                 if (next.exitMode) {
                     mode = "command";
                 }
             }
             else {
-                const next = await handleCommandInput(orchestrator, reader, input);
+                const next = await (0, spinner_1.withSpinner)("Processing command...", () => handleCommandInput(orchestrator, reader, input));
                 mode = next.mode;
                 if (mode === "nlp") {
                     nlpState = createNlpSessionState();

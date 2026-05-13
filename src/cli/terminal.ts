@@ -8,6 +8,7 @@ import { formatPipelineInfo } from "../utils/cicd";
 import { GitIntent } from "../utils/git-nl-parser";
 import { DevOpsIntent } from "../utils/devops-nl-parser";
 import { SecurityIntent } from "../utils/security-nl-parser";
+import { withSpinner } from "../utils/spinner";
 
 type TerminalMode = "command" | "nlp" | "devops" | "git" | "security";
 
@@ -58,29 +59,39 @@ export async function runTerminal(orchestrator: Orchestrator): Promise<void> {
 
     try {
       if (mode === "nlp") {
-        const next = await handleNlpInput(orchestrator, input, nlpState);
+        const next = await withSpinner("Analyzing request...", () =>
+          handleNlpInput(orchestrator, input, nlpState),
+        );
         nlpState = next.state;
         if (next.exitMode) {
           mode = "command";
           nlpState = createNlpSessionState();
         }
       } else if (mode === "devops") {
-        const next = await handleDevopsInput(orchestrator, reader, input);
+        const next = await withSpinner("Executing DevOps command...", () =>
+          handleDevopsInput(orchestrator, reader, input),
+        );
         if (next.exitMode) {
           mode = "command";
         }
       } else if (mode === "git") {
-        const next = await handleGitInput(orchestrator, reader, input);
+        const next = await withSpinner("Running git operation...", () =>
+          handleGitInput(orchestrator, reader, input),
+        );
         if (next.exitMode) {
           mode = "command";
         }
       } else if (mode === "security") {
-        const next = await handleSecurityInput(orchestrator, reader, input);
+        const next = await withSpinner("Analyzing security...", () =>
+          handleSecurityInput(orchestrator, reader, input),
+        );
         if (next.exitMode) {
           mode = "command";
         }
       } else {
-        const next = await handleCommandInput(orchestrator, reader, input);
+        const next = await withSpinner("Processing command...", () =>
+          handleCommandInput(orchestrator, reader, input),
+        );
         mode = next.mode;
         if (mode === "nlp") {
           nlpState = createNlpSessionState();

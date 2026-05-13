@@ -11,7 +11,7 @@ import path from "path";
 import { exec } from "child_process";
 import { paths } from "../config/paths";
 import { runCodeScan, formatScanReport, ScanReport } from "./code-scanner";
-import { checkAiHealth } from "./llm";
+import { checkAiHealth, aiAnalyzeScanResults } from "./llm";
 import { getChangedFiles, getCurrentBranch } from "./git";
 import { validateBranchName, validateCommitMessage, getGitFlowGuide } from "./git-policy";
 import { listRecentCommits } from "./git";
@@ -44,12 +44,28 @@ function runShell(cmd: string, cwd: string): Promise<{ stdout: string; stderr: s
 // ---------------------------------------------------------------------------
 
 export async function runFullScan(): Promise<string[]> {
-  const report = await runCodeScan(paths.appRepoDir);
-  return formatScanReport(report);
+  const report = await runCodeScan(paths.repoDir);
+  const formatted = formatScanReport(report);
+  
+  if (report.findings.length > 0) {
+    const analysis = await aiAnalyzeScanResults(
+      "AI Deep Logical Scan", 
+      report.findings,
+      "Prioritize these SAST findings, identify false positives, and suggest remediation strategies."
+    );
+    return [
+      ...formatted,
+      "",
+      "── AI Security Analysis ──",
+      ...analysis.map(line => `  ${line}`)
+    ];
+  }
+  
+  return formatted;
 }
 
 export async function runScanErrorsOnly(): Promise<string[]> {
-  const report = await runCodeScan(paths.appRepoDir);
+  const report = await runCodeScan(paths.repoDir);
   const errors = report.findings.filter((f) => f.severity === "ERROR");
   if (errors.length === 0) return ["✓ No ERROR-level findings."];
   const lines: string[] = [`${errors.length} ERROR-level finding(s):`];
@@ -63,7 +79,7 @@ export async function runScanErrorsOnly(): Promise<string[]> {
 }
 
 export async function runScanWarningsOnly(): Promise<string[]> {
-  const report = await runCodeScan(paths.appRepoDir);
+  const report = await runCodeScan(paths.repoDir);
   const warnings = report.findings.filter((f) => f.severity === "WARNING");
   if (warnings.length === 0) return ["✓ No WARNING-level findings."];
   const lines: string[] = [`${warnings.length} WARNING-level finding(s):`];
@@ -77,7 +93,7 @@ export async function runScanWarningsOnly(): Promise<string[]> {
 }
 
 export async function runScanSummary(): Promise<string[]> {
-  const report = await runCodeScan(paths.appRepoDir);
+  const report = await runCodeScan(paths.repoDir);
   return [
     "Security Scan Summary:",
     `  Scanned files: ${report.scannedFiles}`,
@@ -94,7 +110,7 @@ export async function runScanSummary(): Promise<string[]> {
 }
 
 export async function scanSingleFile(filePath: string): Promise<string[]> {
-  const fullPath = path.resolve(paths.appRepoDir, filePath);
+  const fullPath = path.resolve(paths.repoDir, filePath);
   try {
     await fs.access(fullPath);
   } catch {
@@ -102,7 +118,7 @@ export async function scanSingleFile(filePath: string): Promise<string[]> {
   }
 
   // Run a targeted scan on just this file
-  const report = await runCodeScan(paths.appRepoDir);
+  const report = await runCodeScan(paths.repoDir);
   const normalizedTarget = fullPath.replace(/\\/g, "/");
   const fileFindings = report.findings.filter(
     (f) => f.filePath.replace(/\\/g, "/") === normalizedTarget ||
@@ -116,7 +132,19 @@ export async function scanSingleFile(filePath: string): Promise<string[]> {
     lines.push(`    Line ${f.lineNumber}: ${f.matchedContent}`);
     lines.push(`    Fix: ${f.remediation}`);
   }
-  return lines;
+
+  const analysis = await aiAnalyzeScanResults(
+    "AI Deep Scan (Single File)",
+    fileFindings,
+    `Analyze findings for file: ${filePath}`
+  );
+
+  return [
+    ...lines,
+    "",
+    "── AI Security Analysis ──",
+    ...analysis.map(line => `  ${line}`)
+  ];
 }
 
 export async function getScanRules(): Promise<string[]> {
@@ -140,7 +168,7 @@ export async function getScanRules(): Promise<string[]> {
 // ---------------------------------------------------------------------------
 
 export async function checkSecrets(): Promise<string[]> {
-  const report = await runCodeScan(paths.appRepoDir);
+  const report = await runCodeScan(paths.repoDir);
   const secretRules = ["SEC-001", "SEC-002", "SEC-003", "SEC-007", "SEC-008", "SEC-009", "SEC-010"];
   const secrets = report.findings.filter((f) => secretRules.includes(f.ruleId));
   if (secrets.length === 0) return ["✓ No hardcoded secrets detected."];
@@ -153,7 +181,19 @@ export async function checkSecrets(): Promise<string[]> {
   }
   lines.push("");
   lines.push("Remediation: Move all secrets to HashiCorp Vault or environment variables.");
-  return lines;
+
+  const analysis = await aiAnalyzeScanResults(
+    "AI Secret Scanner",
+    secrets,
+    "Determine if any of these are likely false positives (e.g. test data) vs real secrets."
+  );
+
+  return [
+    ...lines,
+    "",
+    "── AI Security Analysis ──",
+    ...analysis.map(line => `  ${line}`)
+  ];
 }
 
 export async function auditEnvFile(): Promise<string[]> {
@@ -263,7 +303,19 @@ export async function auditDeps(): Promise<string[]> {
         ? "  ✓ No critical or high vulnerabilities."
         : `  ✗ ${critical} critical/high vulnerability(ies) — run 'npm audit fix'.`
     );
-    return lines;
+
+    const analysis = await aiAnalyzeScanResults(
+      "npm audit (FOSS)",
+      [data.metadata ?? {}],
+      "Summarize the dependency vulnerability risk and provide a high-level mitigation strategy."
+    );
+
+    return [
+      ...lines,
+      "",
+      "── AI Security Analysis ──",
+      ...analysis.map(line => `  ${line}`)
+    ];
   } catch {
     const lines = result.stdout.split(/\r?\n/).slice(0, 15);
     return ["Dependency Audit:", ...lines.map((l) => `  ${l}`)];
@@ -444,7 +496,7 @@ export async function runComplianceCheck(): Promise<string[]> {
   }
 
   // Security scan
-  const report = await runCodeScan(paths.appRepoDir);
+  const report = await runCodeScan(paths.repoDir);
   lines.push(
     report.errors === 0
       ? "  ✓ No security errors in code"
@@ -579,7 +631,33 @@ export async function checkDockerSecurity(): Promise<string[]> {
     checks.push("  No Dockerfile found.");
   }
 
-  return checks;
+  // Try real Trivy if installed
+  const trivyRes = await runShell("trivy config --format json Dockerfile", paths.rootDir);
+  let rawFindings: any[] = [];
+  if (trivyRes.code === 0 && trivyRes.stdout.trim().startsWith("{")) {
+    try {
+      const parsed = JSON.parse(trivyRes.stdout);
+      rawFindings = parsed.Results || [];
+      checks.push("", "  [INFO] Real Trivy scan executed successfully.");
+    } catch {
+      // Ignore parse error
+    }
+  } else {
+    rawFindings = [...checks]; // Pass baseline checks as raw findings
+  }
+
+  const analysis = await aiAnalyzeScanResults(
+    trivyRes.code === 0 ? "Trivy" : "Baseline Docker Scanner",
+    rawFindings,
+    "Review Docker security findings, prioritize risks, and suggest exact Dockerfile remediations."
+  );
+
+  return [
+    ...checks,
+    "",
+    "── AI Security Analysis ──",
+    ...analysis.map(line => `  ${line}`)
+  ];
 }
 
 export async function checkTerraformSecurity(): Promise<string[]> {
@@ -636,7 +714,33 @@ export async function checkTerraformSecurity(): Promise<string[]> {
     checks.push("  No terraform/main.tf found.");
   }
 
-  return checks;
+  // Try real Checkov if installed
+  const checkovRes = await runShell("checkov -f terraform/main.tf -o json", paths.rootDir);
+  let rawFindings: any[] = [];
+  if (checkovRes.stdout.trim().startsWith("{")) {
+    try {
+      const parsed = JSON.parse(checkovRes.stdout);
+      rawFindings = parsed.results?.failed_checks || [];
+      checks.push("", "  [INFO] Real Checkov scan executed successfully.");
+    } catch {
+      // Ignore parse error
+    }
+  } else {
+    rawFindings = [...checks]; // Pass baseline checks as raw findings
+  }
+
+  const analysis = await aiAnalyzeScanResults(
+    checkovRes.stdout.trim().startsWith("{") ? "Checkov" : "Baseline Terraform Scanner",
+    rawFindings,
+    "Review IaC misconfigurations, identify false positives, and suggest HCL snippet fixes."
+  );
+
+  return [
+    ...checks,
+    "",
+    "── AI Security Analysis ──",
+    ...analysis.map(line => `  ${line}`)
+  ];
 }
 
 // ---------------------------------------------------------------------------
@@ -647,7 +751,7 @@ export async function getSecurityDashboard(): Promise<string[]> {
   const lines: string[] = ["Security Dashboard:"];
 
   // Code scan summary
-  const report = await runCodeScan(paths.appRepoDir);
+  const report = await runCodeScan(paths.repoDir);
   lines.push("");
   lines.push("Code Scan:");
   lines.push(`  Files scanned: ${report.scannedFiles}`);
@@ -705,7 +809,7 @@ export async function getSecurityPosture(): Promise<string[]> {
   const lines: string[] = ["Security Posture Summary:"];
 
   // Quick counts
-  const report = await runCodeScan(paths.appRepoDir);
+  const report = await runCodeScan(paths.repoDir);
   const secretRules = ["SEC-001", "SEC-002", "SEC-003", "SEC-007", "SEC-008", "SEC-009"];
 
   const metrics = [

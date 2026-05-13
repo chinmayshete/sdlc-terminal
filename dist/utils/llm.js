@@ -5,6 +5,8 @@ exports.generateCode = generateCode;
 exports.generateTests = generateTests;
 exports.generateFreeNlpChat = generateFreeNlpChat;
 exports.explainFileWithChat = explainFileWithChat;
+exports.aiAnalyzeScanResults = aiAnalyzeScanResults;
+exports.performAiVulnerabilityScan = performAiVulnerabilityScan;
 exports.checkAiHealth = checkAiHealth;
 const env_1 = require("../config/env");
 async function generatePlan(ticket, files) {
@@ -139,6 +141,82 @@ async function explainFileWithChat(filePath, content, history) {
             },
         ]);
         return response.message?.trim() || fallback;
+    }
+    catch {
+        return fallback;
+    }
+}
+async function aiAnalyzeScanResults(scannerName, findings, context = "") {
+    const fallback = [
+        `Analyzed ${findings.length} findings from ${scannerName}.`,
+        "AI risk analysis is currently offline or unconfigured."
+    ];
+    if (!shouldUseAzure()) {
+        return fallback;
+    }
+    try {
+        const response = await callAzureJson([
+            {
+                role: "system",
+                content: `You are an expert Security Analyst orchestrating findings from ${scannerName}. Review the raw findings and context, then return a JSON object with {"analysis": string[]} containing a prioritized list of insights, false-positive reduction, and remediation guidance. Keep strings short and suitable for a CLI.`
+            },
+            {
+                role: "user",
+                content: JSON.stringify({ findings, context })
+            }
+        ]);
+        return response.analysis && response.analysis.length > 0
+            ? response.analysis
+            : fallback;
+    }
+    catch {
+        return fallback;
+    }
+}
+async function performAiVulnerabilityScan(filePath, content) {
+    const fallback = [];
+    if (!shouldUseAzure()) {
+        return fallback;
+    }
+    try {
+        // Add line numbers to the content to help the LLM identify exact lines
+        const numberedLines = content
+            .split(/\r?\n/)
+            .map((line, i) => `${i + 1}: ${line}`)
+            .join("\n");
+        const response = await callAzureJson([
+            {
+                role: "system",
+                content: `You are a professional security scanner (SAST/Secrets). Analyze the provided file content and return a JSON object with {"findings": Array}.
+The content is provided with line numbers (e.g., "1: code"). Use these exact line numbers for your findings.
+Each finding must have:
+- ruleId: string (e.g., SAST-001, SECRET-001)
+- category: string (Must be one of the "Core SAST Test Categories" listed below)
+- description: string (clear description of the vulnerability)
+- severity: "ERROR" | "WARNING" | "INFO"
+- lineNumber: number (the original line number from the provided content)
+- matchedContent: string (the code snippet, excluding the line number prefix)
+- remediation: string (how to fix it)
+
+Core SAST Test Categories:
+- Injection Flaws (SQL, LDAP, Command injection)
+- Cross-Site Scripting (XSS)
+- Broken Access Control (IDOR, hardcoded roles)
+- Insecure Cryptographic Practices (weak encryption, hardcoded keys)
+- Insecure Deserialization
+- Secrets Management (hardcoded credentials, API keys)
+- Memory Management Issues (buffer overflows)
+- Configuration Errors (insecure settings in IaC/config)
+
+Focus on: SQL injection, Command injection, SSRF, XSS, Hardcoded Secrets, Weak Crypto, and Broken Access Control.
+Return only valid JSON.`,
+            },
+            {
+                role: "user",
+                content: `File: ${filePath}\n\nContent (with line numbers):\n${numberedLines}`,
+            },
+        ]);
+        return response.findings || fallback;
     }
     catch {
         return fallback;
