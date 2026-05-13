@@ -1,0 +1,13 @@
+🌍 How to Install Nexus Globally
+To use Nexus as a generic tool in any workspace on your machine, follow these steps:
+
+Open your terminal in the sdlc-terminal root directory.
+Run the global installation command:
+bash
+npm install -g .
+Verify the installation: You can now run nexus from any other folder on your computer:
+bash
+nexus terminal
+Note: When running in a new workspace, ensure you have your .env file (or environment variables) configured for Azure OpenAI so the AI features can initialize.
+
+Your enterprise-grade SDLC orchestrator is now live and ready to be used as a global productivity tool!
