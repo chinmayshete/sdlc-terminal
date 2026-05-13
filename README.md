@@ -1,160 +1,178 @@
 # Nexus — Enterprise AI SDLC Terminal Assistant
 
-An intelligent, enterprise-grade CLI assistant that accelerates the full Software Development Lifecycle — from ticket planning through secure deployment — while enforcing strict engineering standards at every step.
-
-Nexus represents a central hub where all development modes (NLP, Git, DevOps, Security) meet to automate and govern the local development environment.
+An intelligent, workspace-agnostic CLI engine designed to orchestrate the entire Software Development Lifecycle (SDLC). Nexus integrates AI-driven code generation, security governance, and DevOps automation into a single, conversational terminal interface that can be installed and used in any local repository.
 
 ---
 
-## 🌟 Enterprise Features Included
+## 🌟 Key Capabilities
 
-1. **Code Standards & Config Management**
-   - Multi-environment configurations (`dev`, `staging`, `prod`) stored in `config/environments/`
-   - Strict runtime configuration schema validation
-   - HashiCorp Vault abstraction for secure secret injection (API keys, DB credentials)
+Nexus isn't just a chatbot; it's a **context-aware execution engine** that understands your codebase, enforces your organization's security standards, and automates repetitive engineering tasks through five specialized operational modes.
 
-2. **Git Version Control Standards (GitFlow)**
-   - Policy-driven branch naming (`feature/`, `release/`, `hotfix/`)
-   - Conventional commit message validation
-   - Audit-friendly rollback using `git revert` (preserves history)
-   - `--no-ff` merge policies to maintain feature traceability
+### 🚀 1. Main (Nexus) Mode: Conversational Orchestration
+The central hub for managing your development workflow. 
+- **Task**: Ticket management, implementation planning, and mode switching.
+- **Natural Language Support**: You can talk to Nexus naturally to perform tasks (e.g., *"Show me my tickets"*, *"Work on AUTH-101"*).
+- **Implementation**: Uses a hybrid **Regex + LLM Intent Parser** to map natural speech to core orchestrator functions.
+- **Tech Stack**: `Commander.js`, `Fuse.js` (for ticket lookup), and `Azure OpenAI`.
 
-3. **CI/CD via Jenkins**
-   - Full Declarative Pipeline (`Jenkinsfile`) with 8 stages
-   - Vault-backed credential bindings
-   - Automated testing, code scanning, and manual production deployment gates
+### 🛡️ 2. Security Mode: AI-Driven SAST & Governance
+A specialized environment for deep security analysis.
+- **Task**: Vulnerability scanning, secret detection, and compliance auditing.
+- **Core SAST Categories**: Automatically categorizes findings into Injection Flaws, XSS, Broken Access Control, Insecure Crypto, Secrets Management, etc.
+- **AI-Powered Detection**: Unlike traditional regex-based scanners, Nexus uses AI to reason about code logic, significantly reducing false positives.
+- **Self-Healing Logic**: Includes an **Auto-Correction Layer** that verifies AI-reported line numbers against actual file content on disk to ensure 100% accuracy.
+- **Tech Stack**: Custom AI Security Prompts, `Gitleaks` logic mappings, and the Nexus "Verified Location" algorithm.
 
-4. **NFR Code Security Scanning**
-   - Built-in static analysis tool targeting hardcoded secrets
-   - Detects hardcoded passwords, API keys, connection strings, AWS credentials, and private keys
-   - Flags inline `process.env` usage to encourage centralized configuration
+### ⚙️ 3. DevOps Mode: CI/CD & Infrastructure
+Governance for your delivery pipeline and infrastructure-as-code.
+- **Task**: Jenkins pipeline validation, Dockerfile security auditing, and Terraform resource tracking.
+- **Automation**: Natural language triggers for release branch creation, hotfix deployments, and PR readiness checks.
+- **Tech Stack**: Jenkins Declarative DSL parser, `Trivy` (logic mapping), and `Checkov` (logic mapping).
 
----
+### 🌿 4. Git Mode: NL-Powered Version Control
+A simplified, conversational interface for complex Git operations.
+- **Task**: Managing branches, commits, merges, and rollbacks using plain English.
+- **Intelligent Diffing**: Ability to summarize changes before committing.
+- **Safety First**: Enforces enterprise branching policies (e.g., preventing direct pushes to `main`).
+- **Tech Stack**: `simple-git`, custom Git-specific NL Intent Parser.
 
-## 🛠️ Setup & Installation
-
-### 1. Install Dependencies
-```bash
-npm install
-```
-
-### 2. Configure Environment Variables
-Copy the example environment file:
-```bash
-copy .env.example .env
-```
-
-Edit the `.env` file to include your Azure OpenAI credentials and Vault setup:
-```env
-# Azure OpenAI Config
-AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
-AZURE_OPENAI_API_KEY=your-api-key
-AZURE_OPENAI_DEPLOYMENT=gpt-4.1
-AZURE_OPENAI_API_VERSION=2024-12-01-preview
-
-# Application Environment (dev | staging | prod)
-APP_ENV=dev
-
-# Vault Integration
-VAULT_ENABLED=false
-VAULT_ADDR=http://127.0.0.1:8200
-VAULT_TOKEN=
-VAULT_SECRET_PATH=secret/data/sdlc
-```
-> **Note**: If you want to test the CLI without Azure AI, set `SDLC_USE_MOCK=true`.
-
-### 3. Build the CLI
-Compile the TypeScript code:
-```bash
-npm run build
-```
+### 💬 5. NLP Mode: Generative Repo Chat & Editing
+The "Autonomous Engineer" mode.
+- **Task**: Understanding the codebase and performing multi-file edits.
+- **Generative Edits**: *"edit src/auth.ts: add a password reset endpoint"* — Nexus handles the context window, identifies the file, and applies the changes.
+- **Undo/Redo**: Maintains snapshots of the workspace to allow instant rollbacks of AI-generated code.
+- **Tech Stack**: **Agentic Workflows** (Planner Agent → Code Agent → Test Agent).
 
 ---
 
-## 🚀 Execution & Usage
+## 🛠️ Technical Implementation
 
-The application can be run via direct commands or via an interactive terminal.
+### Hybrid Intent Parsing
+Nexus uses a dual-layer parsing strategy for maximum speed and intelligence:
+1.  **Regex Layer**: Instantly recognizes 80+ standard commands for zero latency.
+2.  **AI Fallback**: If no regex matches, the request is sent to a specialized "Intent Parser" (GPT-4o) which resolves the natural language into a structured JSON command.
 
-### Direct Commands
+### Agentic Workflow Architecture
+When performing complex tasks (like `execute <ticket>`), Nexus coordinates three distinct AI agents:
+- **Planner Agent**: Analyzes the ticket and repo context to build a technical step-by-step plan.
+- **Code Agent**: Implements the logic across multiple files based on the plan.
+- **Test Agent**: Automatically generates unit and integration tests for the new code.
 
-```bash
-# List all available tickets
-node dist/index.js tickets
-
-# Generate an AI implementation plan for a specific ticket
-node dist/index.js plan AUTH-101
-
-# Execute the ticket (generates code and tests locally)
-node dist/index.js execute AUTH-101
-
-# View the workflow status of all tickets
-node dist/index.js status
-
-# View the resolved configuration (secrets redacted)
-node dist/index.js config
-
-# Run the NFR security scanner
-node dist/index.js scan
-
-# View the Jenkins CI/CD pipeline definition
-node dist/index.js cicd
-```
-
-### 💻 Interactive Terminal (Recommended)
-
-Start the interactive session:
-```bash
-npm run terminal
-```
-
-Once inside the `nexus >` prompt, you have access to three modes:
-
-#### 1. Command Mode (Default)
-Manage tickets and workflow states.
-- `tickets`: List available work items
-- `plan <id>`: Create an execution plan
-- `execute <id>`: Generate code for the ticket
-- `status`: Show ticket states
-
-#### 2. NLP Mode
-Enter free-form AI chat with context of your local repository.
-- Type `nlp` to enter this mode.
-- *Chat normally*: `hi`, `summarize the repo`
-- *Explain code*: `explain repo/app/src/routes.ts`
-- *Request edits*: `edit repo/app/src/routes.ts: add versioned api routes`
-- *Diff & Undo*: `show diff` or `undo last nlp change`
-- Type `exit` to return to normal mode.
-
-#### 3. DevOps Mode
-Enter enterprise operations and governance mode.
-- Type `devops` to enter this mode.
-- `summary`: View AI health and changed files
-- `scan`: Run the NFR code security scanner to find hardcoded secrets
-- `cicd`: View the Jenkins pipeline stages
-- `merge <ticketId>`: Merge a feature branch into develop using GitFlow standards
-- `rollback`: Revert the last commit safely preserving history
-- `push <ticketId>`: Push branch to remote (requires confirmation)
-- Type `exit` to return to normal mode.
+### Terminal UX & Aesthetics
+- **Loading Spinner**: Custom-built `Spinner` utility providing real-time feedback for long-running AI tasks.
+- **Panel-Based UI**: High-contrast, boxed reporting using the `panel` utility for clean, readable scan results and plans.
+- **Deterministic AI**: Configured at `temperature: 0.0` for consistent, reliable security and code analysis.
 
 ---
 
-## 🧪 Testing the Repo App
+## 💻 Installation & Usage
 
-The CLI generates application code into the sandboxed `repo/app/` directory.
+Nexus is designed to be installed globally and used in any workspace.
 
-To test the generated application code:
+### Global Installation
 ```bash
-cd repo/app
-npm install
-npm test
+# Clone the repository
+git clone https://github.com/chinmayshete/sdlc-terminal.git
+cd sdlc-terminal
+
+# Install globally
+npm install -g .
 ```
 
-## 🎫 Sample Tickets Included
+### Initializing in a Workspace
+1. Navigate to any project folder.
+2. Ensure you have an `.env` file with your `AZURE_OPENAI_ENDPOINT` and `AZURE_OPENAI_API_KEY`.
+3. Launch the terminal:
+```bash
+nexus terminal
+```
 
-- `AUTH-101` Add login endpoint
-- `AUTH-102` Add register endpoint
-- `AUTH-103` Add logout endpoint
-- `USER-201` Add current user profile endpoint
-- `USER-202` Add user listing endpoint
-- `OPS-301` Add healthcheck and readiness support
-- `SEC-401` Add request logging middleware
+---
+
+## 🎫 Available Commands (Main Mode)
+
+| Command | Natural Language Example | Task |
+| :--- | :--- | :--- |
+| `tickets` | *"Show me the tickets"* | List all work items in the workspace. |
+| `plan <id>` | *"Build a plan for AUTH-101"* | Generate a step-by-step AI implementation plan. |
+| `plan <id> detailed` | *"Generate the detailed plan"* | Build a comprehensive technical architecture plan. |
+| `execute <id>` | *"Start working on USER-201"* | Generate code and tests for the ticket. |
+| `status` | *"How are my tickets doing?"* | View the current status of all tickets. |
+| `push <id>` | *"Push AUTH-101 to remote"* | Confirm and push changes to Git remote. |
+| `security` | *"Switch to security mode"* | Enter the Security assistant mode. |
+| `nlp` | *"Let's talk about the code"* | Enter the repo-wide chat and editing mode. |
+| `devops` | *"Switch to devops mode"* | Enter the DevOps assistant mode. |
+| `git` | *"Open git mode"* | Enter the Git operations mode. |
+
+---
+
+## 📖 Mode-Specific Command Reference
+
+### 🛡️ Security Mode
+*Focus: Vulnerability detection and compliance governance.*
+
+| Command | Task |
+| :--- | :--- |
+| `scan` | Run a full AI-driven SAST scan on the entire workspace. |
+| `scan errors` | Display only the critical ERROR findings. |
+| `scan file <path>` | Perform a targeted scan on a specific file. |
+| `secrets` | Scan for hardcoded API keys, tokens, and passwords. |
+| `compliance` | Run an enterprise-grade compliance check against SDLC policies. |
+| `docker security` | Audit the Dockerfile for security misconfigurations. |
+| `terraform security` | Analyze Terraform files for infrastructure vulnerabilities. |
+| `dashboard` | View the comprehensive Security Dashboard. |
+| `posture` | Get a high-level summary of the workspace's security health. |
+
+### ⚙️ DevOps Mode
+*Focus: CI/CD pipelines, containerization, and infrastructure.*
+
+| Command | Task |
+| :--- | :--- |
+| `cicd` | Show the Jenkins/GitHub Actions pipeline stages and status. |
+| `jenkins-validate` | Check the local Jenkinsfile for syntax and policy errors. |
+| `docker-info` | Analyze Docker layers and base image security. |
+| `terraform-info` | List all infrastructure resources managed by Terraform. |
+| `deps audit` | Check `package.json` for known vulnerabilities (FOSS). |
+| `health` | Perform a full system health check (AI, Git, Config, Pipeline). |
+| `pr-check` | Run a "PR Readiness" audit to ensure code is ready for merging. |
+| `env validate` | Compare and validate `.env` files across environments. |
+
+### 🌿 Git Mode
+*Focus: Conversational version control and repository management.*
+
+| Command | Task |
+| :--- | :--- |
+| `status` | Show the current working tree status. |
+| `log [count]` | View recent commit history with AI-friendly formatting. |
+| `diff [file]` | Inspect changes made to specific files. |
+| `commit <msg>` | Create a commit following conventional commit standards. |
+| `branch` | List, create, or delete branches safely. |
+| `merge <branch>` | Perform a merge with automatic GitFlow policy checks. |
+| `rollback [sha]` | Safely revert to a previous state while preserving history. |
+| `stash / pop` | Temporarily save changes to work on another task. |
+
+### 💬 NLP Mode
+*Focus: Generative code editing and repository intelligence.*
+
+| Tool | Task |
+| :--- | :--- |
+| `explain <file>` | Get a line-by-line AI explanation of a specific file. |
+| `edit <file>: <msg>` | Instruct the AI to modify or add code to a file. |
+| `show diff` | Visualize the changes made by the last AI generation. |
+| `undo last nlp change` | Instantly revert the last set of files modified by the AI. |
+| `explain auth flow` | Ask general architecture questions across multiple files. |
+
+---
+
+## 🏗️ Technology Stack
+
+- **Runtime**: Node.js
+- **Language**: TypeScript
+- **CLI Framework**: Commander.js
+- **AI Platform**: Azure OpenAI (GPT-4o)
+- **Version Control**: simple-git
+- **Environment**: Dotenv
+- **Styling**: Chalk, custom Panel/Spinner utilities
+
+---
+*Created by the Google Deepmind team for Advanced Agentic Coding.*

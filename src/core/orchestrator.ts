@@ -140,6 +140,10 @@ import {
   parseSecurityIntentWithLlm,
   getSecurityCommandHelp,
 } from "../utils/security-nl-parser";
+import {
+  NexusIntent,
+  parseNexusIntentWithLlm,
+} from "../utils/nexus-nl-parser";
 
 export class Orchestrator {
   constructor(
@@ -155,7 +159,7 @@ export class Orchestrator {
     return this.ticketService.listTickets();
   }
 
-  async plan(ticketId: string): Promise<PlanResult> {
+  async plan(ticketId: string, mode: "basic" | "detailed" = "basic"): Promise<PlanResult> {
     logStep("Reading ticket...");
     const ticket = await this.ticketService.readTicket(ticketId);
 
@@ -163,7 +167,7 @@ export class Orchestrator {
     const context = await this.contextBuilder.build(ticket);
 
     logStep("Generating plan...");
-    const result = await this.plannerAgent.run(ticket, context);
+    const result = await this.plannerAgent.run(ticket, context, mode === "detailed");
     await this.stateService.setTicketStatus(ticket.id, "PLANNED");
     return result;
   }
@@ -562,6 +566,14 @@ export class Orchestrator {
 
   getSecurityHelp(): string[] {
     return getSecurityCommandHelp();
+  }
+
+  // -------------------------------------------------------------------------
+  // Main Mode Operations
+  // -------------------------------------------------------------------------
+
+  async parseNexusNaturalLanguage(input: string): Promise<NexusIntent> {
+    return parseNexusIntentWithLlm(input);
   }
 }
 

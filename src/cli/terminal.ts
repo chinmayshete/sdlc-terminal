@@ -143,14 +143,15 @@ async function handleCommandInput(
     case "plan": {
       const ticketId = args[0];
       if (!ticketId) {
-        console.log(warning("Usage: plan <ticketId>"));
+        console.log(warning("Usage: plan <ticketId> [detailed]"));
         return { mode: "command", closeTerminal: false };
       }
 
-      const plan = await orchestrator.plan(ticketId);
+      const isDetailed = args[1]?.toLowerCase() === "detailed" || args[1]?.toLowerCase() === "comprehensive";
+      const plan = await orchestrator.plan(ticketId, isDetailed ? "detailed" : "basic");
       console.log(
         panel(
-          `Plan ${ticketId}`,
+          `${isDetailed ? "Comprehensive " : ""}Plan ${ticketId}`,
           plan.steps.map((step, index) => `${index + 1}. ${step}`),
         ),
       );
@@ -214,9 +215,9 @@ async function handleCommandInput(
     case "nlp": {
       console.log(
         panel("NLP Mode", [
-          "Free chat mode with access to the local repo.",
-          'Chat naturally: "hi", "summarize the auth flow", "how does routes.ts work?"',
-          'Edit directly: "edit repo/src/routes.ts: add versioned api routes"',
+          "Free chat mode with access to the local workspace.",
+          'Chat naturally: "hi", "summarize the auth flow", "how does src/routes.ts work?"',
+          'Edit directly: "edit src/routes.ts: add versioned api routes"',
           "Tools: explain <file>, show diff, undo last nlp change, exit",
         ]),
       );
@@ -318,9 +319,77 @@ async function handleCommandInput(
     case "exit":
     case "quit":
       return { mode: "command", closeTerminal: true };
-    default:
+    default: {
+      // Try natural language parsing if direct command doesn't match
+      const intent = await orchestrator.parseNexusNaturalLanguage(input);
+
+      if (intent.command !== "unknown") {
+        // Execute the resolved intent
+        switch (intent.command) {
+          case "tickets":
+            return handleCommandInput(orchestrator, reader, "tickets");
+          case "plan": {
+            const ticketId = intent.args[0];
+            const isDetailed = intent.args[1] === "detailed";
+            if (!ticketId) {
+              console.log(warning("Please specify a ticket ID (e.g., 'plan AUTH-101')"));
+              return { mode: "command", closeTerminal: false };
+            }
+
+            const plan = await orchestrator.plan(ticketId, isDetailed ? "detailed" : "basic");
+            console.log(
+              panel(
+                `${isDetailed ? "Comprehensive " : ""}Plan ${ticketId}`,
+                plan.steps.map((step, index) => `${index + 1}. ${step}`),
+              ),
+            );
+            return { mode: "command", closeTerminal: false };
+          }
+          case "execute":
+            return handleCommandInput(
+              orchestrator,
+              reader,
+              `execute ${intent.args[0] || ""}`,
+            );
+          case "status":
+            return handleCommandInput(orchestrator, reader, "status");
+          case "ai":
+            return handleCommandInput(orchestrator, reader, "ai");
+          case "security":
+            return handleCommandInput(orchestrator, reader, "security");
+          case "nlp":
+            return handleCommandInput(orchestrator, reader, "nlp");
+          case "devops":
+            return handleCommandInput(orchestrator, reader, "devops");
+          case "git":
+            return handleCommandInput(orchestrator, reader, "git");
+          case "push":
+            return handleCommandInput(
+              orchestrator,
+              reader,
+              `push ${intent.args[0] || ""}`,
+            );
+          case "reset":
+            return handleCommandInput(
+              orchestrator,
+              reader,
+              `reset ${intent.args[0] || ""}`,
+            );
+          case "reset-all":
+            return handleCommandInput(orchestrator, reader, "reset-all");
+          case "help":
+            return handleCommandInput(orchestrator, reader, "help");
+          case "exit":
+            return { mode: "command", closeTerminal: true };
+          default:
+            console.log(danger(`Unknown command: ${command}`));
+            return { mode: "command", closeTerminal: false };
+        }
+      }
+
       console.log(danger(`Unknown command: ${command}`));
       return { mode: "command", closeTerminal: false };
+    }
   }
 }
 
@@ -340,8 +409,8 @@ async function handleNlpInput(
     console.log(
       panel("NLP Help", [
         'Chat normally: "hi", "summarize the repo", "what does auth.controller do?"',
-        'Target a file: "edit repo/src/routes.ts: add versioned api routes"',
-        'Explain a file: "explain repo/src/routes.ts"',
+        'Target a file: "edit src/routes.ts: add versioned api routes"',
+        'Explain a file: "explain src/routes.ts"',
         'General explanation: "explain the auth flow" or "explain me the code base"',
         'Inspect changes: "show diff"',
         'Rollback: "undo last nlp change"',

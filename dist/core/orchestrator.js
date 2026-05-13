@@ -24,6 +24,7 @@ const devops_operations_1 = require("../utils/devops-operations");
 const devops_nl_parser_1 = require("../utils/devops-nl-parser");
 const security_operations_1 = require("../utils/security-operations");
 const security_nl_parser_1 = require("../utils/security-nl-parser");
+const nexus_nl_parser_1 = require("../utils/nexus-nl-parser");
 class Orchestrator {
     constructor(ticketService, stateService, contextBuilder, plannerAgent, codeAgent, testAgent) {
         this.ticketService = ticketService;
@@ -36,13 +37,13 @@ class Orchestrator {
     async listTickets() {
         return this.ticketService.listTickets();
     }
-    async plan(ticketId) {
+    async plan(ticketId, mode = "basic") {
         (0, logger_1.logStep)("Reading ticket...");
         const ticket = await this.ticketService.readTicket(ticketId);
         (0, logger_1.logStep)("Analyzing repo...");
         const context = await this.contextBuilder.build(ticket);
         (0, logger_1.logStep)("Generating plan...");
-        const result = await this.plannerAgent.run(ticket, context);
+        const result = await this.plannerAgent.run(ticket, context, mode === "detailed");
         await this.stateService.setTicketStatus(ticket.id, "PLANNED");
         return result;
     }
@@ -340,6 +341,12 @@ class Orchestrator {
     }
     getSecurityHelp() {
         return (0, security_nl_parser_1.getSecurityCommandHelp)();
+    }
+    // -------------------------------------------------------------------------
+    // Main Mode Operations
+    // -------------------------------------------------------------------------
+    async parseNexusNaturalLanguage(input) {
+        return (0, nexus_nl_parser_1.parseNexusIntentWithLlm)(input);
     }
 }
 exports.Orchestrator = Orchestrator;

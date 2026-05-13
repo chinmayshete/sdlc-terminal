@@ -9,7 +9,7 @@ exports.aiAnalyzeScanResults = aiAnalyzeScanResults;
 exports.performAiVulnerabilityScan = performAiVulnerabilityScan;
 exports.checkAiHealth = checkAiHealth;
 const env_1 = require("../config/env");
-async function generatePlan(ticket, files) {
+async function generatePlan(ticket, files, isDetailed = false) {
     const fallback = buildFallbackPlan(ticket, files);
     if (!shouldUseAzure()) {
         return fallback;
@@ -18,7 +18,9 @@ async function generatePlan(ticket, files) {
         const response = await callAzureJson([
             {
                 role: "system",
-                content: 'You are an SDLC planning assistant. Return JSON only with shape {"steps": string[]}. Keep the plan concise and implementation-focused.',
+                content: isDetailed
+                    ? 'You are an SDLC planning assistant. Return JSON only with shape {"steps": string[]}. Provide a COMPREHENSIVE, detailed technical plan. Include specific architecture decisions, API endpoints, schema definitions, edge cases to handle, and security best practices.'
+                    : 'You are an SDLC planning assistant. Return JSON only with shape {"steps": string[]}. Keep the plan concise and implementation-focused.',
             },
             {
                 role: "user",
@@ -75,7 +77,7 @@ async function generateTests(ticket, codeChanges) {
         const response = await callAzureJson([
             {
                 role: "system",
-                content: 'You write Jest tests for a small TypeScript Express repo. Return JSON only with shape {"files": [{"path": string, "content": string}]}. Always return complete file contents. Every file path must stay inside repo/app/.',
+                content: 'You write Jest tests for a small TypeScript Express repo. Return JSON only with shape {"files": [{"path": string, "content": string}]}. Always return complete file contents. Every file path must be relative to the current workspace.',
             },
             {
                 role: "user",
@@ -100,7 +102,7 @@ async function generateFreeNlpChat(files, history, prompt) {
         const response = await callAzureJson([
             {
                 role: "system",
-                content: 'You are a terminal coding assistant with access to a local TypeScript codebase. Return JSON only with shape {"message": string, "files": [{"path": string, "content": string}]}. Behave like a natural chat assistant: answer questions, summarize code, explain architecture, and help a developer reason. Only include files when the user clearly asks for code changes or new files. Always return complete file contents for any changed files. If a specific file path is named, prefer scoped edits to that file. Every returned file path must stay inside repo/app/.',
+                content: 'You are a terminal coding assistant with access to a local TypeScript codebase. Return JSON only with shape {"message": string, "files": [{"path": string, "content": string}]}. Behave like a natural chat assistant: answer questions, summarize code, explain architecture, and help a developer reason. Only include files when the user clearly asks for code changes or new files. Always return complete file contents for any changed files. If a specific file path is named, prefer scoped edits to that file. Every returned file path must be relative to the current workspace.',
             },
             {
                 role: "user",

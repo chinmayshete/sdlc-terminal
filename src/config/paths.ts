@@ -1,12 +1,16 @@
 import path from "path";
 
-const rootDir = path.resolve(__dirname, "..", "..");
+// In a generic installable tool, rootDir is the workspace where the tool is executed
+const rootDir = process.cwd();
 
 export const paths = {
   rootDir,
+  // Tickets are expected in a 'tickets' folder in the current workspace
   ticketsDir: path.join(rootDir, "tickets"),
-  repoDir: path.join(rootDir, "repo"),
-  appRepoDir: path.join(rootDir, "repo", "app"),
+  // The codebase to scan/manage is the current workspace itself
+  repoDir: rootDir,
+  appRepoDir: rootDir,
+  // Local state and configuration for the workspace
   stateDir: path.join(rootDir, ".sdlc"),
   stateFile: path.join(rootDir, ".sdlc", "state.json"),
 };
