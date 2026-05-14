@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.runTerminal = runTerminal;
 const readline_1 = __importDefault(require("readline"));
+const chalk_1 = __importDefault(require("chalk"));
 const ticket_catalog_1 = require("../core/ticket-catalog");
 const theme_1 = require("../utils/theme");
 const code_scanner_1 = require("../utils/code-scanner");
@@ -79,7 +80,7 @@ async function runTerminal(orchestrator) {
             console.log((0, theme_1.danger)(message));
         }
         if (shouldClose) {
-            console.log((0, theme_1.accent)("Session closed."));
+            console.log(chalk_1.default.bold.blue("Session closed."));
             reader.close();
             return;
         }
@@ -121,10 +122,10 @@ async function handleCommandInput(orchestrator, reader, input) {
             }
             const result = await orchestrator.execute(ticketId);
             console.log((0, theme_1.panel)(`Execution ${ticketId}`, [
-                `Updated files: ${result.updatedFiles.join(", ") || "none"}`,
-                `Generated tests: ${result.generatedTests.join(", ") || "none"}`,
-                `Ticket status: ${result.ticketStatus}`,
-                "No git commit or push was performed.",
+                `${chalk_1.default.bold("Updated files:")} ${result.updatedFiles.length > 0 ? chalk_1.default.cyan(result.updatedFiles.join(", ")) : chalk_1.default.gray("none")}`,
+                `${chalk_1.default.bold("Generated tests:")} ${result.generatedTests.length > 0 ? chalk_1.default.cyan(result.generatedTests.join(", ")) : chalk_1.default.gray("none")}`,
+                `${chalk_1.default.bold("Ticket status:")} ${chalk_1.default.bold.yellow(result.ticketStatus)}`,
+                chalk_1.default.italic.gray("No git commit or push was performed."),
             ]));
             return { mode: "command", closeTerminal: false };
         }
@@ -140,11 +141,12 @@ async function handleCommandInput(orchestrator, reader, input) {
         }
         case "ai": {
             const health = await orchestrator.aiHealth();
+            const reachableColor = health.reachable ? chalk_1.default.bold.green : chalk_1.default.bold.red;
             console.log((0, theme_1.panel)("AI Health", [
-                `Mode: ${health.mode}`,
-                `Configured: ${health.configured ? "yes" : "no"}`,
-                `Reachable: ${health.reachable ? "yes" : "no"}`,
-                `Message: ${health.message}`,
+                `Mode: ${chalk_1.default.bold.cyan(health.mode)}`,
+                `Configured: ${health.configured ? chalk_1.default.green("yes") : chalk_1.default.red("no")}`,
+                `Reachable: ${reachableColor(health.reachable ? "yes" : "no")}`,
+                `Message: ${chalk_1.default.gray(health.message)}`,
             ]));
             return { mode: "command", closeTerminal: false };
         }
@@ -303,7 +305,7 @@ async function handleCommandInput(orchestrator, reader, input) {
 async function handleNlpInput(orchestrator, input, state) {
     const normalized = input.toLowerCase();
     if (normalized === "exit" || normalized === "quit") {
-        console.log((0, theme_1.accent)("Leaving NLP mode."));
+        console.log(chalk_1.default.bold.yellow("Leaving NLP mode."));
         return { exitMode: true, state };
     }
     if (normalized === "help") {
@@ -394,7 +396,7 @@ async function handleNlpInput(orchestrator, input, state) {
 async function handleDevopsInput(orchestrator, reader, input) {
     const normalized = input.toLowerCase().trim();
     if (normalized === "exit" || normalized === "quit") {
-        console.log((0, theme_1.accent)("Leaving DevOps mode."));
+        console.log(chalk_1.default.bold.yellow("Leaving DevOps mode."));
         return { exitMode: true };
     }
     if (normalized === "help") {
@@ -527,10 +529,10 @@ function buildDiffLines(snapshots) {
                 continue;
             }
             if (before !== undefined) {
-                lines.push(`- ${before}`);
+                lines.push(chalk_1.default.red(`- ${before}`));
             }
             if (after !== undefined) {
-                lines.push(`+ ${after}`);
+                lines.push(chalk_1.default.green(`+ ${after}`));
             }
         }
     }
@@ -544,7 +546,14 @@ function createNlpSessionState() {
     };
 }
 function renderTicketStatuses(entries) {
-    return entries.map((entry) => `${entry.ticketId}: ${entry.status}${entry.note ? ` | ${entry.note}` : ""}`);
+    return entries.map((entry) => {
+        const statusColor = entry.status === "COMPLETED"
+            ? chalk_1.default.bold.green
+            : entry.status === "IN_DEVELOPMENT"
+                ? chalk_1.default.bold.yellow
+                : chalk_1.default.gray;
+        return `${chalk_1.default.bold.cyan(entry.ticketId)}: ${statusColor(entry.status)}${entry.note ? ` | ${chalk_1.default.italic(entry.note)}` : ""}`;
+    });
 }
 function updatePrompt(reader, mode) {
     if (mode === "nlp") {
@@ -581,7 +590,7 @@ function looksLikeFilePath(value) {
 async function handleGitInput(orchestrator, reader, input) {
     const normalized = input.toLowerCase().trim();
     if (normalized === "exit" || normalized === "quit") {
-        console.log((0, theme_1.accent)("Leaving Git mode."));
+        console.log(chalk_1.default.bold.yellow("Leaving Git mode."));
         return { exitMode: true };
     }
     if (normalized === "help") {

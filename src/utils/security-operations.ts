@@ -9,6 +9,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { exec } from "child_process";
+import chalk from "chalk";
 import { paths } from "../config/paths";
 import { runCodeScan, formatScanReport, ScanReport } from "./code-scanner";
 import { checkAiHealth, aiAnalyzeScanResults } from "./llm";
@@ -56,8 +57,8 @@ export async function runFullScan(): Promise<string[]> {
     return [
       ...formatted,
       "",
-      "── AI Security Analysis ──",
-      ...analysis.map(line => `  ${line}`)
+      chalk.bold.underline.blue("── AI Security Analysis ──"),
+      ...analysis.map(line => `  ${chalk.cyan(line)}`)
     ];
   }
   
@@ -67,8 +68,8 @@ export async function runFullScan(): Promise<string[]> {
 export async function runScanErrorsOnly(): Promise<string[]> {
   const report = await runCodeScan(paths.repoDir);
   const errors = report.findings.filter((f) => f.severity === "ERROR");
-  if (errors.length === 0) return ["✓ No ERROR-level findings."];
-  const lines: string[] = [`${errors.length} ERROR-level finding(s):`];
+  if (errors.length === 0) return [chalk.bold.green("✓ No ERROR-level findings.")];
+  const lines: string[] = [chalk.bold.red(`${errors.length} ERROR-level finding(s):`)];
   for (const f of errors) {
     const shortPath = f.filePath.split("/").slice(-3).join("/");
     lines.push(`  [${f.ruleId}] ${f.description}`);
@@ -95,17 +96,17 @@ export async function runScanWarningsOnly(): Promise<string[]> {
 export async function runScanSummary(): Promise<string[]> {
   const report = await runCodeScan(paths.repoDir);
   return [
-    "Security Scan Summary:",
-    `  Scanned files: ${report.scannedFiles}`,
-    `  Total findings: ${report.totalFindings}`,
-    `  Errors: ${report.errors}`,
-    `  Warnings: ${report.warnings}`,
-    `  Info: ${report.infos}`,
-    `  Scanned at: ${report.scannedAt}`,
+    chalk.bold.blue("Security Scan Summary:"),
+    `  Scanned files: ${chalk.cyan(report.scannedFiles)}`,
+    `  Total findings: ${chalk.bold(report.totalFindings)}`,
+    `  Errors: ${chalk.bold.red(report.errors)}`,
+    `  Warnings: ${chalk.bold.yellow(report.warnings)}`,
+    `  Info: ${chalk.bold.cyan(report.infos)}`,
+    `  Scanned at: ${chalk.gray(report.scannedAt)}`,
     "",
     report.errors === 0
-      ? "✓ No critical security violations."
-      : `⚠ ${report.errors} ERROR-level finding(s) require immediate attention.`,
+      ? chalk.bold.green("✓ No critical security violations.")
+      : chalk.bold.red(`⚠ ${report.errors} ERROR-level finding(s) require immediate attention.`),
   ];
 }
 
@@ -171,8 +172,8 @@ export async function checkSecrets(): Promise<string[]> {
   const report = await runCodeScan(paths.repoDir);
   const secretRules = ["SEC-001", "SEC-002", "SEC-003", "SEC-007", "SEC-008", "SEC-009", "SEC-010"];
   const secrets = report.findings.filter((f) => secretRules.includes(f.ruleId));
-  if (secrets.length === 0) return ["✓ No hardcoded secrets detected."];
-  const lines: string[] = [`⚠ ${secrets.length} potential secret(s) found:`];
+  if (secrets.length === 0) return [chalk.bold.green("✓ No hardcoded secrets detected.")];
+  const lines: string[] = [chalk.bold.red(`⚠ ${secrets.length} potential secret(s) found:`)];
   for (const f of secrets) {
     const shortPath = f.filePath.split("/").slice(-3).join("/");
     lines.push(`  [${f.ruleId}] ${f.severity} — ${f.description}`);
@@ -207,11 +208,11 @@ export async function auditEnvFile(): Promise<string[]> {
     );
     lines.push(
       envIgnored
-        ? "  ✓ .env is listed in .gitignore"
-        : "  ✗ .env is NOT in .gitignore — secrets may be committed!"
+        ? chalk.green("  ✓ .env is listed in .gitignore")
+        : chalk.bold.red("  ✗ .env is NOT in .gitignore — secrets may be committed!")
     );
   } catch {
-    lines.push("  ⚠ No .gitignore found");
+    lines.push(chalk.yellow("  ⚠ No .gitignore found"));
   }
 
   // Check .env file contents for sensitive patterns
@@ -313,8 +314,8 @@ export async function auditDeps(): Promise<string[]> {
     return [
       ...lines,
       "",
-      "── AI Security Analysis ──",
-      ...analysis.map(line => `  ${line}`)
+      chalk.bold.underline.blue("── AI Security Analysis ──"),
+      ...analysis.map(line => `  ${chalk.cyan(line)}`)
     ];
   } catch {
     const lines = result.stdout.split(/\r?\n/).slice(0, 15);

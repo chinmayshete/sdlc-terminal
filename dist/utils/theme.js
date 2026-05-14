@@ -8,6 +8,11 @@ exports.panel = panel;
 exports.accent = accent;
 exports.warning = warning;
 exports.danger = danger;
+exports.success = success;
+exports.info = info;
+exports.subtle = subtle;
+exports.primary = primary;
+exports.secondary = secondary;
 const chalk_1 = __importDefault(require("chalk"));
 const MIN_WIDTH = 54;
 const MAX_WIDTH = 94;
@@ -48,7 +53,10 @@ function panel(title, body) {
     const header = formatLine(chalk_1.default.bold.hex("#38bdf8")(title), innerWidth);
     const rows = body
         .flatMap((line) => wrapLine(line, innerWidth))
-        .map((line) => formatLine(chalk_1.default.hex("#e2e8f0")(line), innerWidth));
+        .map((line) => {
+        const coloredLine = hasAnsi(line) ? line : chalk_1.default.hex("#e2e8f0")(line);
+        return formatLine(coloredLine, innerWidth);
+    });
     return [top, header, ...rows, bottom].join("\n");
 }
 function accent(text) {
@@ -59,6 +67,21 @@ function warning(text) {
 }
 function danger(text) {
     return chalk_1.default.bold.hex("#ef4444")(text);
+}
+function success(text) {
+    return chalk_1.default.bold.hex("#22c55e")(text);
+}
+function info(text) {
+    return chalk_1.default.bold.hex("#06b6d4")(text);
+}
+function subtle(text) {
+    return chalk_1.default.hex("#64748b")(text);
+}
+function primary(text) {
+    return chalk_1.default.bold.hex("#38bdf8")(text);
+}
+function secondary(text) {
+    return chalk_1.default.bold.hex("#818cf8")(text);
 }
 function terminalWidth() {
     const cols = typeof process.stdout.columns === "number" ? process.stdout.columns : 80;
@@ -97,4 +120,7 @@ function wrapLine(text, innerWidth) {
 }
 function stripAnsi(value) {
     return value.replace(/\u001b\[[0-9;]*m/g, "");
+}
+function hasAnsi(value) {
+    return /\u001b\[[0-9;]*m/.test(value);
 }

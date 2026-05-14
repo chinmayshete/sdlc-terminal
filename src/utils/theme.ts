@@ -45,7 +45,10 @@ export function panel(title: string, body: string[]): string {
   const header = formatLine(chalk.bold.hex("#38bdf8")(title), innerWidth);
   const rows = body
     .flatMap((line) => wrapLine(line, innerWidth))
-    .map((line) => formatLine(chalk.hex("#e2e8f0")(line), innerWidth));
+    .map((line) => {
+      const coloredLine = hasAnsi(line) ? line : chalk.hex("#e2e8f0")(line);
+      return formatLine(coloredLine, innerWidth);
+    });
   return [top, header, ...rows, bottom].join("\n");
 }
 
@@ -59,6 +62,26 @@ export function warning(text: string): string {
 
 export function danger(text: string): string {
   return chalk.bold.hex("#ef4444")(text);
+}
+
+export function success(text: string): string {
+  return chalk.bold.hex("#22c55e")(text);
+}
+
+export function info(text: string): string {
+  return chalk.bold.hex("#06b6d4")(text);
+}
+
+export function subtle(text: string): string {
+  return chalk.hex("#64748b")(text);
+}
+
+export function primary(text: string): string {
+  return chalk.bold.hex("#38bdf8")(text);
+}
+
+export function secondary(text: string): string {
+  return chalk.bold.hex("#818cf8")(text);
 }
 
 function terminalWidth(): number {
@@ -109,4 +132,8 @@ function wrapLine(text: string, innerWidth: number): string[] {
 
 function stripAnsi(value: string): string {
   return value.replace(/\u001b\[[0-9;]*m/g, "");
+}
+
+function hasAnsi(value: string): boolean {
+  return /\u001b\[[0-9;]*m/.test(value);
 }

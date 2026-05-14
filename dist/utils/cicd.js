@@ -14,6 +14,7 @@ exports.formatPipelineInfo = formatPipelineInfo;
 exports.validateJenkinsfile = validateJenkinsfile;
 const fs_1 = require("fs");
 const path_1 = __importDefault(require("path"));
+const chalk_1 = __importDefault(require("chalk"));
 const EXPECTED_STAGES = [
     {
         name: "Checkout",
@@ -87,14 +88,27 @@ async function getPipelineInfo(rootDir) {
  */
 function formatPipelineInfo(info) {
     const lines = [
-        `Pipeline: ${info.pipelineType}`,
-        `Jenkinsfile: ${info.hasJenkinsfile ? "✓ Present" : "✗ Missing"}`,
+        `Pipeline: ${chalk_1.default.bold.blue(info.pipelineType)}`,
+        `Jenkinsfile: ${info.hasJenkinsfile ? chalk_1.default.bold.green("✓ Present") : chalk_1.default.bold.red("✗ Missing")}`,
         "",
-        "Stages:",
+        chalk_1.default.bold.underline("Stages:"),
     ];
     for (const [i, stage] of info.stages.entries()) {
-        const icon = stage.status === "passed" ? "✓" : stage.status === "failed" ? "✗" : "○";
-        lines.push(`  ${i + 1}. [${icon}] ${stage.name} — ${stage.description}`);
+        let icon = "○";
+        let color = chalk_1.default.white;
+        if (stage.status === "passed") {
+            icon = "✓";
+            color = chalk_1.default.bold.green;
+        }
+        else if (stage.status === "failed") {
+            icon = "✗";
+            color = chalk_1.default.bold.red;
+        }
+        else if (stage.status === "running") {
+            icon = "▶";
+            color = chalk_1.default.bold.yellow;
+        }
+        lines.push(`  ${i + 1}. [${color(icon)}] ${color(stage.name)} — ${chalk_1.default.gray(stage.description)}`);
     }
     lines.push("");
     lines.push("Parameters:");
@@ -117,29 +131,29 @@ async function validateJenkinsfile(rootDir) {
     try {
         const content = await fs_1.promises.readFile(jenkinsfilePath, "utf8");
         if (!content.includes("pipeline {")) {
-            issues.push("Missing 'pipeline' block declaration.");
+            issues.push(chalk_1.default.yellow("Missing 'pipeline' block declaration."));
         }
         if (!content.includes("agent")) {
-            issues.push("Missing 'agent' specification.");
+            issues.push(chalk_1.default.yellow("Missing 'agent' specification."));
         }
         if (!content.includes("stages {")) {
-            issues.push("Missing 'stages' block.");
+            issues.push(chalk_1.default.yellow("Missing 'stages' block."));
         }
         if (!content.includes("post {")) {
-            issues.push("Missing 'post' block for build notifications.");
+            issues.push(chalk_1.default.yellow("Missing 'post' block for build notifications."));
         }
         if (!content.includes("credentials(")) {
-            issues.push("No credential bindings found. Use Jenkins Credentials for secrets.");
+            issues.push(chalk_1.default.cyan("No credential bindings found. Use Jenkins Credentials for secrets."));
         }
         if (content.includes("password") && !content.includes("credentials(")) {
-            issues.push("Possible hardcoded password in Jenkinsfile.");
+            issues.push(chalk_1.default.bold.red("Possible hardcoded password in Jenkinsfile."));
         }
         if (issues.length === 0) {
-            issues.push("✓ Jenkinsfile passes all structural checks.");
+            issues.push(chalk_1.default.bold.green("✓ Jenkinsfile passes all structural checks."));
         }
     }
     catch {
-        issues.push("Jenkinsfile not found at project root.");
+        issues.push(chalk_1.default.bold.red("Jenkinsfile not found at project root."));
     }
     return issues;
 }

@@ -33,6 +33,7 @@ exports.getSecurityPosture = getSecurityPosture;
 const fs_1 = require("fs");
 const path_1 = __importDefault(require("path"));
 const child_process_1 = require("child_process");
+const chalk_1 = __importDefault(require("chalk"));
 const paths_1 = require("../config/paths");
 const code_scanner_1 = require("./code-scanner");
 const llm_1 = require("./llm");
@@ -67,8 +68,8 @@ async function runFullScan() {
         return [
             ...formatted,
             "",
-            "── AI Security Analysis ──",
-            ...analysis.map(line => `  ${line}`)
+            chalk_1.default.bold.underline.blue("── AI Security Analysis ──"),
+            ...analysis.map(line => `  ${chalk_1.default.cyan(line)}`)
         ];
     }
     return formatted;
@@ -77,8 +78,8 @@ async function runScanErrorsOnly() {
     const report = await (0, code_scanner_1.runCodeScan)(paths_1.paths.repoDir);
     const errors = report.findings.filter((f) => f.severity === "ERROR");
     if (errors.length === 0)
-        return ["✓ No ERROR-level findings."];
-    const lines = [`${errors.length} ERROR-level finding(s):`];
+        return [chalk_1.default.bold.green("✓ No ERROR-level findings.")];
+    const lines = [chalk_1.default.bold.red(`${errors.length} ERROR-level finding(s):`)];
     for (const f of errors) {
         const shortPath = f.filePath.split("/").slice(-3).join("/");
         lines.push(`  [${f.ruleId}] ${f.description}`);
@@ -104,17 +105,17 @@ async function runScanWarningsOnly() {
 async function runScanSummary() {
     const report = await (0, code_scanner_1.runCodeScan)(paths_1.paths.repoDir);
     return [
-        "Security Scan Summary:",
-        `  Scanned files: ${report.scannedFiles}`,
-        `  Total findings: ${report.totalFindings}`,
-        `  Errors: ${report.errors}`,
-        `  Warnings: ${report.warnings}`,
-        `  Info: ${report.infos}`,
-        `  Scanned at: ${report.scannedAt}`,
+        chalk_1.default.bold.blue("Security Scan Summary:"),
+        `  Scanned files: ${chalk_1.default.cyan(report.scannedFiles)}`,
+        `  Total findings: ${chalk_1.default.bold(report.totalFindings)}`,
+        `  Errors: ${chalk_1.default.bold.red(report.errors)}`,
+        `  Warnings: ${chalk_1.default.bold.yellow(report.warnings)}`,
+        `  Info: ${chalk_1.default.bold.cyan(report.infos)}`,
+        `  Scanned at: ${chalk_1.default.gray(report.scannedAt)}`,
         "",
         report.errors === 0
-            ? "✓ No critical security violations."
-            : `⚠ ${report.errors} ERROR-level finding(s) require immediate attention.`,
+            ? chalk_1.default.bold.green("✓ No critical security violations.")
+            : chalk_1.default.bold.red(`⚠ ${report.errors} ERROR-level finding(s) require immediate attention.`),
     ];
 }
 async function scanSingleFile(filePath) {
@@ -169,8 +170,8 @@ async function checkSecrets() {
     const secretRules = ["SEC-001", "SEC-002", "SEC-003", "SEC-007", "SEC-008", "SEC-009", "SEC-010"];
     const secrets = report.findings.filter((f) => secretRules.includes(f.ruleId));
     if (secrets.length === 0)
-        return ["✓ No hardcoded secrets detected."];
-    const lines = [`⚠ ${secrets.length} potential secret(s) found:`];
+        return [chalk_1.default.bold.green("✓ No hardcoded secrets detected.")];
+    const lines = [chalk_1.default.bold.red(`⚠ ${secrets.length} potential secret(s) found:`)];
     for (const f of secrets) {
         const shortPath = f.filePath.split("/").slice(-3).join("/");
         lines.push(`  [${f.ruleId}] ${f.severity} — ${f.description}`);
@@ -194,11 +195,11 @@ async function auditEnvFile() {
         const gitignore = await fs_1.promises.readFile(path_1.default.join(paths_1.paths.rootDir, ".gitignore"), "utf8");
         const envIgnored = gitignore.split(/\r?\n/).some((line) => line.trim() === ".env" || line.trim() === "*.env");
         lines.push(envIgnored
-            ? "  ✓ .env is listed in .gitignore"
-            : "  ✗ .env is NOT in .gitignore — secrets may be committed!");
+            ? chalk_1.default.green("  ✓ .env is listed in .gitignore")
+            : chalk_1.default.bold.red("  ✗ .env is NOT in .gitignore — secrets may be committed!"));
     }
     catch {
-        lines.push("  ⚠ No .gitignore found");
+        lines.push(chalk_1.default.yellow("  ⚠ No .gitignore found"));
     }
     // Check .env file contents for sensitive patterns
     try {
@@ -275,8 +276,8 @@ async function auditDeps() {
         return [
             ...lines,
             "",
-            "── AI Security Analysis ──",
-            ...analysis.map(line => `  ${line}`)
+            chalk_1.default.bold.underline.blue("── AI Security Analysis ──"),
+            ...analysis.map(line => `  ${chalk_1.default.cyan(line)}`)
         ];
     }
     catch {

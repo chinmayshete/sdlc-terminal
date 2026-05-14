@@ -7,6 +7,7 @@
 
 import { promises as fs } from "fs";
 import path from "path";
+import chalk from "chalk";
 
 export interface PipelineStage {
   name: string;
@@ -98,16 +99,28 @@ export async function getPipelineInfo(rootDir: string): Promise<PipelineInfo> {
  */
 export function formatPipelineInfo(info: PipelineInfo): string[] {
   const lines: string[] = [
-    `Pipeline: ${info.pipelineType}`,
-    `Jenkinsfile: ${info.hasJenkinsfile ? "✓ Present" : "✗ Missing"}`,
+    `Pipeline: ${chalk.bold.blue(info.pipelineType)}`,
+    `Jenkinsfile: ${info.hasJenkinsfile ? chalk.bold.green("✓ Present") : chalk.bold.red("✗ Missing")}`,
     "",
-    "Stages:",
+    chalk.bold.underline("Stages:"),
   ];
 
   for (const [i, stage] of info.stages.entries()) {
-    const icon =
-      stage.status === "passed" ? "✓" : stage.status === "failed" ? "✗" : "○";
-    lines.push(`  ${i + 1}. [${icon}] ${stage.name} — ${stage.description}`);
+    let icon = "○";
+    let color = chalk.white;
+
+    if (stage.status === "passed") {
+      icon = "✓";
+      color = chalk.bold.green;
+    } else if (stage.status === "failed") {
+      icon = "✗";
+      color = chalk.bold.red;
+    } else if (stage.status === "running") {
+      icon = "▶";
+      color = chalk.bold.yellow;
+    }
+
+    lines.push(`  ${i + 1}. [${color(icon)}] ${color(stage.name)} — ${chalk.gray(stage.description)}`);
   }
 
   lines.push("");
@@ -136,31 +149,31 @@ export async function validateJenkinsfile(rootDir: string): Promise<string[]> {
     const content = await fs.readFile(jenkinsfilePath, "utf8");
 
     if (!content.includes("pipeline {")) {
-      issues.push("Missing 'pipeline' block declaration.");
+      issues.push(chalk.yellow("Missing 'pipeline' block declaration."));
     }
     if (!content.includes("agent")) {
-      issues.push("Missing 'agent' specification.");
+      issues.push(chalk.yellow("Missing 'agent' specification."));
     }
     if (!content.includes("stages {")) {
-      issues.push("Missing 'stages' block.");
+      issues.push(chalk.yellow("Missing 'stages' block."));
     }
     if (!content.includes("post {")) {
-      issues.push("Missing 'post' block for build notifications.");
+      issues.push(chalk.yellow("Missing 'post' block for build notifications."));
     }
     if (!content.includes("credentials(")) {
       issues.push(
-        "No credential bindings found. Use Jenkins Credentials for secrets.",
+        chalk.cyan("No credential bindings found. Use Jenkins Credentials for secrets."),
       );
     }
     if (content.includes("password") && !content.includes("credentials(")) {
-      issues.push("Possible hardcoded password in Jenkinsfile.");
+      issues.push(chalk.bold.red("Possible hardcoded password in Jenkinsfile."));
     }
 
     if (issues.length === 0) {
-      issues.push("✓ Jenkinsfile passes all structural checks.");
+      issues.push(chalk.bold.green("✓ Jenkinsfile passes all structural checks."));
     }
   } catch {
-    issues.push("Jenkinsfile not found at project root.");
+    issues.push(chalk.bold.red("Jenkinsfile not found at project root."));
   }
 
   return issues;

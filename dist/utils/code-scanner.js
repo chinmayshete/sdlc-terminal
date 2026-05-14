@@ -13,6 +13,7 @@ exports.runCodeScan = runCodeScan;
 exports.formatScanReport = formatScanReport;
 const fs_1 = require("fs");
 const path_1 = __importDefault(require("path"));
+const chalk_1 = __importDefault(require("chalk"));
 const llm_1 = require("./llm");
 /**
  * @deprecated These hardcoded regex rules are retained as a deterministic
@@ -163,13 +164,16 @@ async function runCodeScan(scanDir) {
 }
 function formatScanReport(report) {
     const lines = [
-        "Code Security Scan Results",
-        `Scanned: ${report.scannedFiles} files | ${report.scannedAt}`,
-        `Findings: ${report.totalFindings} total — ${report.errors} ERROR, ${report.warnings} WARNING, ${report.infos} INFO`,
+        chalk_1.default.bold.underline("Code Security Scan Results"),
+        `Scanned: ${chalk_1.default.cyan(report.scannedFiles)} files | ${chalk_1.default.gray(report.scannedAt)}`,
+        `Findings: ${chalk_1.default.bold(report.totalFindings)} total — ` +
+            `${chalk_1.default.bold.red(report.errors + " ERROR")}, ` +
+            `${chalk_1.default.bold.yellow(report.warnings + " WARNING")}, ` +
+            `${chalk_1.default.bold.cyan(report.infos + " INFO")}`,
         "",
     ];
     if (report.findings.length === 0) {
-        lines.push("✓ No security violations detected.");
+        lines.push(chalk_1.default.bold.green("✓ No security violations detected."));
         return lines;
     }
     // Get unique categories and sort them
@@ -178,18 +182,31 @@ function formatScanReport(report) {
         const items = report.findings.filter((f) => f.category === cat);
         if (items.length === 0)
             continue;
-        lines.push(`── ${cat.toUpperCase()} ${"─".repeat(Math.max(0, 44 - cat.length))}`);
+        lines.push(chalk_1.default.bold.blue(`── ${cat.toUpperCase()} ${"─".repeat(Math.max(0, 44 - cat.length))}`));
         for (const f of items) {
             const shortPath = f.filePath.split("/").slice(-3).join("/");
-            const severityIcon = f.severity === "ERROR" ? "✗" : "⚠";
-            lines.push(`  [${f.ruleId}] ${severityIcon} ${f.description}`);
-            lines.push(`    File: ${shortPath}:${f.lineNumber}`);
-            lines.push(`    Match: ${f.matchedContent}`);
-            lines.push(`    Fix: ${f.remediation}`);
+            let severityIcon = "○";
+            let severityColor = chalk_1.default.white;
+            if (f.severity === "ERROR") {
+                severityIcon = "✗";
+                severityColor = chalk_1.default.bold.red;
+            }
+            else if (f.severity === "WARNING") {
+                severityIcon = "⚠";
+                severityColor = chalk_1.default.bold.yellow;
+            }
+            else if (f.severity === "INFO") {
+                severityIcon = "ℹ";
+                severityColor = chalk_1.default.bold.cyan;
+            }
+            lines.push(`  [${chalk_1.default.gray(f.ruleId)}] ${severityColor(severityIcon)} ${severityColor(f.description)}`);
+            lines.push(`    File: ${chalk_1.default.cyan(shortPath)}:${chalk_1.default.yellow(f.lineNumber)}`);
+            lines.push(`    Match: ${chalk_1.default.red(f.matchedContent)}`);
+            lines.push(`    Fix: ${chalk_1.default.green(f.remediation)}`);
             lines.push("");
         }
     }
-    lines.push("Remediation: Address findings based on severity and category risk.");
+    lines.push(chalk_1.default.italic.gray("Remediation: Address findings based on severity and category risk."));
     return lines;
 }
 function redactMatch(content) {

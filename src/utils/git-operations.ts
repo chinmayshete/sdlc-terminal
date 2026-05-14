@@ -7,6 +7,7 @@
  */
 
 import simpleGit from "simple-git";
+import chalk from "chalk";
 import { paths } from "../config/paths";
 import { validateBranchName, validateCommitMessage } from "./git-policy";
 
@@ -21,50 +22,50 @@ export async function gitStatus(): Promise<string[]> {
     const status = await git.status();
     const lines: string[] = [];
 
-    lines.push(`Branch: ${status.current ?? "unknown"}`);
+    lines.push(`Branch: ${chalk.bold.cyan(status.current ?? "unknown")}`);
 
     if (status.tracking) {
-      lines.push(`Tracking: ${status.tracking}`);
-      if (status.ahead > 0) lines.push(`  Ahead by ${status.ahead} commit(s)`);
+      lines.push(`Tracking: ${chalk.gray(status.tracking)}`);
+      if (status.ahead > 0) lines.push(chalk.green(`  Ahead by ${status.ahead} commit(s)`));
       if (status.behind > 0)
-        lines.push(`  Behind by ${status.behind} commit(s)`);
+        lines.push(chalk.red(`  Behind by ${status.behind} commit(s)`));
     }
 
     if (status.staged.length > 0) {
       lines.push("");
-      lines.push("Staged:");
-      for (const file of status.staged) lines.push(`  + ${file}`);
+      lines.push(chalk.bold.green("Staged:"));
+      for (const file of status.staged) lines.push(chalk.green(`  + ${file}`));
     }
 
     if (status.modified.length > 0) {
       lines.push("");
-      lines.push("Modified:");
-      for (const file of status.modified) lines.push(`  ~ ${file}`);
+      lines.push(chalk.bold.yellow("Modified:"));
+      for (const file of status.modified) lines.push(chalk.yellow(`  ~ ${file}`));
     }
 
     if (status.not_added.length > 0) {
       lines.push("");
-      lines.push("Untracked:");
-      for (const file of status.not_added) lines.push(`  ? ${file}`);
+      lines.push(chalk.bold.red("Untracked:"));
+      for (const file of status.not_added) lines.push(chalk.red(`  ? ${file}`));
     }
 
     if (status.deleted.length > 0) {
       lines.push("");
-      lines.push("Deleted:");
-      for (const file of status.deleted) lines.push(`  - ${file}`);
+      lines.push(chalk.bold.red("Deleted:"));
+      for (const file of status.deleted) lines.push(chalk.red(`  - ${file}`));
     }
 
     if (status.renamed.length > 0) {
       lines.push("");
-      lines.push("Renamed:");
+      lines.push(chalk.bold.blue("Renamed:"));
       for (const entry of status.renamed)
-        lines.push(`  ${entry.from} -> ${entry.to}`);
+        lines.push(chalk.blue(`  ${entry.from} -> ${entry.to}`));
     }
 
     if (status.conflicted.length > 0) {
       lines.push("");
-      lines.push("Conflicts:");
-      for (const file of status.conflicted) lines.push(`  ! ${file}`);
+      lines.push(chalk.bold.bgRed.white("Conflicts:"));
+      for (const file of status.conflicted) lines.push(chalk.bold.red(`  ! ${file}`));
     }
 
     const totalChanges =
@@ -76,7 +77,7 @@ export async function gitStatus(): Promise<string[]> {
 
     if (totalChanges === 0) {
       lines.push("");
-      lines.push("Working tree is clean.");
+      lines.push(chalk.italic.green("Working tree is clean."));
     }
 
     return lines;
@@ -93,12 +94,12 @@ export async function gitLog(count: number = 10): Promise<string[]> {
       return ["No commits yet."];
     }
 
-    const lines: string[] = [`Last ${log.all.length} commit(s):`];
+    const lines: string[] = [chalk.bold.underline(`Last ${log.all.length} commit(s):`)];
 
     for (const entry of log.all) {
-      const short = entry.hash.slice(0, 8);
-      const date = entry.date.split("T")[0];
-      const author = entry.author_name;
+      const short = chalk.yellow(entry.hash.slice(0, 8));
+      const date = chalk.gray(entry.date.split("T")[0]);
+      const author = chalk.cyan(entry.author_name);
       lines.push(`  ${short} | ${date} | ${author} | ${entry.message}`);
     }
 
@@ -183,10 +184,10 @@ export async function gitCommit(message: string): Promise<string> {
     const warnings = violations.filter((v) => v.severity === "warning");
     const result = await git.commit(message);
     const summary = result.summary;
-    let msg = `Committed: ${summary.changes} change(s), ${summary.insertions} insertion(s), ${summary.deletions} deletion(s)`;
+    let msg = `${chalk.bold.green("Committed:")} ${chalk.cyan(summary.changes)} change(s), ${chalk.green(summary.insertions + "+")}, ${chalk.red(summary.deletions + "-")}`;
 
     if (warnings.length > 0) {
-      msg += ` | Warnings: ${warnings.map((v) => v.message).join("; ")}`;
+      msg += ` | ${chalk.bold.yellow("Warnings:")} ${chalk.yellow(warnings.map((v) => v.message).join("; "))}`;
     }
 
     return msg;
@@ -472,11 +473,11 @@ export async function gitMerge(branch: string): Promise<string> {
 function formatError(error: unknown): string {
   if (error instanceof Error) {
     if (error.message.includes("spawn git ENOENT")) {
-      return "git is not installed or not available on PATH";
+      return chalk.bold.red("git is not installed or not available on PATH");
     }
 
-    return error.message;
+    return chalk.red(error.message);
   }
 
-  return "git is not available";
+  return chalk.red("git is not available");
 }

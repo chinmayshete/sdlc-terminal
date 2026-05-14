@@ -7,6 +7,7 @@
 
 import { promises as fs } from "fs";
 import path from "path";
+import chalk from "chalk";
 import { performAiVulnerabilityScan } from "./llm";
 
 export interface ScanFinding {
@@ -203,14 +204,17 @@ export async function runCodeScan(scanDir: string): Promise<ScanReport> {
 
 export function formatScanReport(report: ScanReport): string[] {
   const lines: string[] = [
-    "Code Security Scan Results",
-    `Scanned: ${report.scannedFiles} files | ${report.scannedAt}`,
-    `Findings: ${report.totalFindings} total — ${report.errors} ERROR, ${report.warnings} WARNING, ${report.infos} INFO`,
+    chalk.bold.underline("Code Security Scan Results"),
+    `Scanned: ${chalk.cyan(report.scannedFiles)} files | ${chalk.gray(report.scannedAt)}`,
+    `Findings: ${chalk.bold(report.totalFindings)} total — ` +
+    `${chalk.bold.red(report.errors + " ERROR")}, ` +
+    `${chalk.bold.yellow(report.warnings + " WARNING")}, ` +
+    `${chalk.bold.cyan(report.infos + " INFO")}`,
     "",
   ];
 
   if (report.findings.length === 0) {
-    lines.push("✓ No security violations detected.");
+    lines.push(chalk.bold.green("✓ No security violations detected."));
     return lines;
   }
 
@@ -223,19 +227,32 @@ export function formatScanReport(report: ScanReport): string[] {
     const items = report.findings.filter((f) => f.category === cat);
     if (items.length === 0) continue;
 
-    lines.push(`── ${cat.toUpperCase()} ${"─".repeat(Math.max(0, 44 - cat.length))}`);
+    lines.push(chalk.bold.blue(`── ${cat.toUpperCase()} ${"─".repeat(Math.max(0, 44 - cat.length))}`));
     for (const f of items) {
       const shortPath = f.filePath.split("/").slice(-3).join("/");
-      const severityIcon = f.severity === "ERROR" ? "✗" : "⚠";
-      lines.push(`  [${f.ruleId}] ${severityIcon} ${f.description}`);
-      lines.push(`    File: ${shortPath}:${f.lineNumber}`);
-      lines.push(`    Match: ${f.matchedContent}`);
-      lines.push(`    Fix: ${f.remediation}`);
+      let severityIcon = "○";
+      let severityColor = chalk.white;
+
+      if (f.severity === "ERROR") {
+        severityIcon = "✗";
+        severityColor = chalk.bold.red;
+      } else if (f.severity === "WARNING") {
+        severityIcon = "⚠";
+        severityColor = chalk.bold.yellow;
+      } else if (f.severity === "INFO") {
+        severityIcon = "ℹ";
+        severityColor = chalk.bold.cyan;
+      }
+
+      lines.push(`  [${chalk.gray(f.ruleId)}] ${severityColor(severityIcon)} ${severityColor(f.description)}`);
+      lines.push(`    File: ${chalk.cyan(shortPath)}:${chalk.yellow(f.lineNumber)}`);
+      lines.push(`    Match: ${chalk.red(f.matchedContent)}`);
+      lines.push(`    Fix: ${chalk.green(f.remediation)}`);
       lines.push("");
     }
   }
 
-  lines.push("Remediation: Address findings based on severity and category risk.");
+  lines.push(chalk.italic.gray("Remediation: Address findings based on severity and category risk."));
   return lines;
 }
 

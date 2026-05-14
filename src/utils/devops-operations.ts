@@ -8,6 +8,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { exec } from "child_process";
+import chalk from "chalk";
 import { paths } from "../config/paths";
 import {
   getPipelineInfo,
@@ -49,11 +50,18 @@ export async function validateJenkins(): Promise<string[]> {
 
 export async function getJenkinsStages(): Promise<string[]> {
   const info = await getPipelineInfo(paths.rootDir);
-  const lines: string[] = ["Jenkins Pipeline Stages:"];
+  const lines: string[] = [chalk.bold.blue("Jenkins Pipeline Stages:")];
   for (const [i, stage] of info.stages.entries()) {
-    const icon =
-      stage.status === "passed" ? "✓" : stage.status === "failed" ? "✗" : "○";
-    lines.push(`  ${i + 1}. [${icon}] ${stage.name} — ${stage.description}`);
+    let icon = "○";
+    let color = chalk.white;
+    if (stage.status === "passed") {
+      icon = "✓";
+      color = chalk.bold.green;
+    } else if (stage.status === "failed") {
+      icon = "✗";
+      color = chalk.bold.red;
+    }
+    lines.push(`  ${i + 1}. [${color(icon)}] ${color(stage.name)} — ${chalk.gray(stage.description)}`);
   }
   return lines;
 }
@@ -72,7 +80,7 @@ export async function getGitHubActionsInfo(): Promise<string[]> {
     );
     if (ymls.length === 0) return ["No GitHub Actions workflows found."];
 
-    const lines: string[] = ["GitHub Actions Workflows:"];
+    const lines: string[] = [chalk.bold.blue("GitHub Actions Workflows:")];
     for (const file of ymls) {
       const content = await fs.readFile(path.join(workflowDir, file), "utf8");
       const nameMatch = content.match(/^name:\s*(.+)$/m);
@@ -80,7 +88,7 @@ export async function getGitHubActionsInfo(): Promise<string[]> {
       const triggers = content.match(/^on:\s*$/m)
         ? "complex trigger"
         : (content.match(/^on:\s+(.+)$/m)?.[1] ?? "unknown");
-      lines.push(`  • ${file}: ${name} (trigger: ${triggers})`);
+      lines.push(`  • ${chalk.cyan(file)}: ${chalk.bold(name)} (trigger: ${chalk.gray(triggers)})`);
     }
     return lines;
   } catch {
@@ -107,8 +115,8 @@ export async function validateGitHubActions(): Promise<string[]> {
       if (!content.includes("runs-on:"))
         issues.push(`${file}: missing 'runs-on' in jobs`);
     }
-    if (issues.length === 0) issues.push("✓ All workflows pass basic checks.");
-    return ["GitHub Actions Validation:", ...issues.map((i) => `  ${i}`)];
+    if (issues.length === 0) issues.push(chalk.bold.green("✓ All workflows pass basic checks."));
+    return [chalk.bold.blue("GitHub Actions Validation:"), ...issues.map((i) => `  ${i}`)];
   } catch {
     return ["No .github/workflows directory found."];
   }
@@ -118,7 +126,7 @@ export async function getPipelineHealth(): Promise<string[]> {
   const jenkins = await validateJenkins();
   const actions = await validateGitHubActions();
   return [
-    "── Pipeline Health ──",
+    chalk.bold.underline.blue("── Pipeline Health ──"),
     "",
     "Jenkins:",
     ...jenkins.map((l) => `  ${l}`),
@@ -140,7 +148,7 @@ export async function runFullSecurityScan(): Promise<string[]> {
 export async function runSecurityScanErrorsOnly(): Promise<string[]> {
   const report = await runCodeScan(paths.appRepoDir);
   const errors = report.findings.filter((f) => f.severity === "ERROR");
-  if (errors.length === 0) return ["✓ No ERROR-level findings."];
+  if (errors.length === 0) return [chalk.bold.green("✓ No ERROR-level findings.")];
   const lines: string[] = [`${errors.length} ERROR-level finding(s):`];
   for (const f of errors) {
     const shortPath = f.filePath.split("/").slice(-3).join("/");
@@ -156,8 +164,8 @@ export async function checkForSecrets(): Promise<string[]> {
   const secrets = report.findings.filter((f) =>
     ["SEC-001", "SEC-002", "SEC-007", "SEC-008", "SEC-009"].includes(f.ruleId),
   );
-  if (secrets.length === 0) return ["✓ No hardcoded secrets detected."];
-  const lines: string[] = [`⚠ ${secrets.length} secret(s) found:`];
+  if (secrets.length === 0) return [chalk.bold.green("✓ No hardcoded secrets detected.")];
+  const lines: string[] = [`${chalk.bold.red("⚠")} ${chalk.bold.red(secrets.length)} secret(s) found:`];
   for (const f of secrets) {
     lines.push(`  [${f.ruleId}] ${f.description} — ${f.filePath}:${f.lineNumber}`);
   }

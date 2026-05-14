@@ -1,4 +1,5 @@
 import readline from "readline";
+import chalk from "chalk";
 import { Orchestrator } from "../core/orchestrator";
 import { formatTicket } from "../core/ticket-catalog";
 import { FileSnapshot, NlpChatTurn, TicketStatusEntry } from "../core/types";
@@ -104,7 +105,7 @@ export async function runTerminal(orchestrator: Orchestrator): Promise<void> {
     }
 
     if (shouldClose) {
-      console.log(accent("Session closed."));
+      console.log(chalk.bold.blue("Session closed."));
       reader.close();
       return;
     }
@@ -167,10 +168,10 @@ async function handleCommandInput(
       const result = await orchestrator.execute(ticketId);
       console.log(
         panel(`Execution ${ticketId}`, [
-          `Updated files: ${result.updatedFiles.join(", ") || "none"}`,
-          `Generated tests: ${result.generatedTests.join(", ") || "none"}`,
-          `Ticket status: ${result.ticketStatus}`,
-          "No git commit or push was performed.",
+          `${chalk.bold("Updated files:")} ${result.updatedFiles.length > 0 ? chalk.cyan(result.updatedFiles.join(", ")) : chalk.gray("none")}`,
+          `${chalk.bold("Generated tests:")} ${result.generatedTests.length > 0 ? chalk.cyan(result.generatedTests.join(", ")) : chalk.gray("none")}`,
+          `${chalk.bold("Ticket status:")} ${chalk.bold.yellow(result.ticketStatus)}`,
+          chalk.italic.gray("No git commit or push was performed."),
         ]),
       );
       return { mode: "command", closeTerminal: false };
@@ -189,12 +190,13 @@ async function handleCommandInput(
     }
     case "ai": {
       const health = await orchestrator.aiHealth();
+      const reachableColor = health.reachable ? chalk.bold.green : chalk.bold.red;
       console.log(
         panel("AI Health", [
-          `Mode: ${health.mode}`,
-          `Configured: ${health.configured ? "yes" : "no"}`,
-          `Reachable: ${health.reachable ? "yes" : "no"}`,
-          `Message: ${health.message}`,
+          `Mode: ${chalk.bold.cyan(health.mode)}`,
+          `Configured: ${health.configured ? chalk.green("yes") : chalk.red("no")}`,
+          `Reachable: ${reachableColor(health.reachable ? "yes" : "no")}`,
+          `Message: ${chalk.gray(health.message)}`,
         ]),
       );
       return { mode: "command", closeTerminal: false };
@@ -401,7 +403,7 @@ async function handleNlpInput(
   const normalized = input.toLowerCase();
 
   if (normalized === "exit" || normalized === "quit") {
-    console.log(accent("Leaving NLP mode."));
+    console.log(chalk.bold.yellow("Leaving NLP mode."));
     return { exitMode: true, state };
   }
 
@@ -517,7 +519,7 @@ async function handleDevopsInput(
   const normalized = input.toLowerCase().trim();
 
   if (normalized === "exit" || normalized === "quit") {
-    console.log(accent("Leaving DevOps mode."));
+    console.log(chalk.bold.yellow("Leaving DevOps mode."));
     return { exitMode: true };
   }
 
@@ -668,11 +670,11 @@ function buildDiffLines(snapshots: FileSnapshot[]): string[] {
       }
 
       if (before !== undefined) {
-        lines.push(`- ${before}`);
+        lines.push(chalk.red(`- ${before}`));
       }
 
       if (after !== undefined) {
-        lines.push(`+ ${after}`);
+        lines.push(chalk.green(`+ ${after}`));
       }
     }
   }
@@ -689,10 +691,15 @@ function createNlpSessionState(): NlpSessionState {
 }
 
 function renderTicketStatuses(entries: TicketStatusEntry[]): string[] {
-  return entries.map(
-    (entry) =>
-      `${entry.ticketId}: ${entry.status}${entry.note ? ` | ${entry.note}` : ""}`,
-  );
+  return entries.map((entry) => {
+    const statusColor =
+      entry.status === "COMPLETED"
+        ? chalk.bold.green
+        : entry.status === "IN_DEVELOPMENT"
+          ? chalk.bold.yellow
+          : chalk.gray;
+    return `${chalk.bold.cyan(entry.ticketId)}: ${statusColor(entry.status)}${entry.note ? ` | ${chalk.italic(entry.note)}` : ""}`;
+  });
 }
 
 function updatePrompt(reader: readline.Interface, mode: TerminalMode): void {
@@ -748,7 +755,7 @@ async function handleGitInput(
   const normalized = input.toLowerCase().trim();
 
   if (normalized === "exit" || normalized === "quit") {
-    console.log(accent("Leaving Git mode."));
+    console.log(chalk.bold.yellow("Leaving Git mode."));
     return { exitMode: true };
   }
 
