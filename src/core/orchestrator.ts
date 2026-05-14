@@ -134,6 +134,7 @@ import {
   checkTerraformSecurity,
   getSecurityDashboard,
   getSecurityPosture,
+  getSecurityScanStatus,
 } from "../utils/security-operations";
 import {
   SecurityIntent,
@@ -558,6 +559,7 @@ export class Orchestrator {
   // Dashboard
   async getSecurityDashboard(): Promise<string[]> { return getSecurityDashboard(); }
   async getSecurityPosture(): Promise<string[]> { return getSecurityPosture(); }
+  async getSecurityStatus(): Promise<string[]> { return getSecurityScanStatus(); }
 
   // NL parsing
   async parseSecurityNaturalLanguage(input: string): Promise<SecurityIntent> {

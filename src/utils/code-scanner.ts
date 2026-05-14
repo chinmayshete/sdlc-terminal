@@ -150,8 +150,11 @@ const SKIP_FILES_FOR_RULES: Record<string, string[]> = {
   ],
 };
 
-export async function runCodeScan(scanDir: string): Promise<ScanReport> {
-  const files = await collectFiles(scanDir);
+export async function runCodeScan(
+  scanDir: string,
+  filesToScan?: string[],
+): Promise<ScanReport> {
+  const files = filesToScan || (await collectFiles(scanDir));
   const findings: ScanFinding[] = [];
 
   for (const filePath of files) {
@@ -254,6 +257,22 @@ export function formatScanReport(report: ScanReport): string[] {
 
   lines.push(chalk.italic.gray("Remediation: Address findings based on severity and category risk."));
   return lines;
+}
+
+export async function saveScanLog(report: ScanReport): Promise<string> {
+  const logDir = path.join(process.cwd(), ".sdlc", "logs");
+  try {
+    await fs.mkdir(logDir, { recursive: true });
+    const now = new Date();
+    const date = now.toISOString().split("T")[0].replace(/-/g, "");
+    const time = now.toTimeString().split(" ")[0].replace(/:/g, "");
+    const logFile = path.join(logDir, `nexus-security-report_${date}_${time}.json`);
+    await fs.writeFile(logFile, JSON.stringify(report, null, 2));
+    return logFile;
+  } catch (err) {
+    console.error("Failed to save scan log:", err);
+    return "";
+  }
 }
 
 function redactMatch(content: string): string {

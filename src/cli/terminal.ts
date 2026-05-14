@@ -60,39 +60,29 @@ export async function runTerminal(orchestrator: Orchestrator): Promise<void> {
 
     try {
       if (mode === "nlp") {
-        const next = await withSpinner("Analyzing request...", () =>
-          handleNlpInput(orchestrator, input, nlpState),
-        );
+        const next = await handleNlpInput(orchestrator, input, nlpState);
         nlpState = next.state;
         if (next.exitMode) {
           mode = "command";
           nlpState = createNlpSessionState();
         }
       } else if (mode === "devops") {
-        const next = await withSpinner("Executing DevOps command...", () =>
-          handleDevopsInput(orchestrator, reader, input),
-        );
+        const next = await handleDevopsInput(orchestrator, reader, input);
         if (next.exitMode) {
           mode = "command";
         }
       } else if (mode === "git") {
-        const next = await withSpinner("Running git operation...", () =>
-          handleGitInput(orchestrator, reader, input),
-        );
+        const next = await handleGitInput(orchestrator, reader, input);
         if (next.exitMode) {
           mode = "command";
         }
       } else if (mode === "security") {
-        const next = await withSpinner("Analyzing security...", () =>
-          handleSecurityInput(orchestrator, reader, input),
-        );
+        const next = await handleSecurityInput(orchestrator, reader, input);
         if (next.exitMode) {
           mode = "command";
         }
       } else {
-        const next = await withSpinner("Processing command...", () =>
-          handleCommandInput(orchestrator, reader, input),
-        );
+        const next = await handleCommandInput(orchestrator, reader, input);
         mode = next.mode;
         if (mode === "nlp") {
           nlpState = createNlpSessionState();
@@ -149,7 +139,9 @@ async function handleCommandInput(
       }
 
       const isDetailed = args[1]?.toLowerCase() === "detailed" || args[1]?.toLowerCase() === "comprehensive";
-      const plan = await orchestrator.plan(ticketId, isDetailed ? "detailed" : "basic");
+      const plan = await withSpinner(`Generating ${isDetailed ? "comprehensive " : ""}plan...`, () => 
+        orchestrator.plan(ticketId, isDetailed ? "detailed" : "basic")
+      );
       console.log(
         panel(
           `${isDetailed ? "Comprehensive " : ""}Plan ${ticketId}`,
@@ -165,7 +157,7 @@ async function handleCommandInput(
         return { mode: "command", closeTerminal: false };
       }
 
-      const result = await orchestrator.execute(ticketId);
+      const result = await withSpinner("Executing ticket...", () => orchestrator.execute(ticketId));
       console.log(
         panel(`Execution ${ticketId}`, [
           `${chalk.bold("Updated files:")} ${result.updatedFiles.length > 0 ? chalk.cyan(result.updatedFiles.join(", ")) : chalk.gray("none")}`,
@@ -268,7 +260,7 @@ async function handleCommandInput(
         return { mode: "command", closeTerminal: false };
       }
 
-      const result = await orchestrator.push(ticketId);
+      const result = await withSpinner("Pushing to remote...", () => orchestrator.push(ticketId));
       console.log(panel("Push Result", [result]));
       return { mode: "command", closeTerminal: false };
     }
@@ -459,7 +451,7 @@ async function handleNlpInput(
   if (normalized.startsWith("explain ")) {
     const target = input.slice("explain ".length).trim();
     if (looksLikeFilePath(target)) {
-      const explanation = await orchestrator.explainFile(target, state.history);
+      const explanation = await withSpinner(`Explaining ${target}...`, () => orchestrator.explainFile(target, state.history));
       const nextState: NlpSessionState = {
         ...state,
         history: [
@@ -473,7 +465,7 @@ async function handleNlpInput(
     }
   }
 
-  const result = await orchestrator.runFreeNlpChat(state.history, input);
+  const result = await withSpinner("Thinking...", () => orchestrator.runFreeNlpChat(state.history, input));
   const nextHistory = [
     ...state.history,
     { role: "user", content: input },
@@ -491,7 +483,7 @@ async function handleNlpInput(
     };
   }
 
-  const snapshots = await orchestrator.applyNlpChanges(result.changes);
+  const snapshots = await withSpinner("Applying changes...", () => orchestrator.applyNlpChanges(result.changes));
   const diffLines = buildDiffLines(snapshots);
   console.log(
     panel("NLP", [
@@ -529,7 +521,7 @@ async function handleDevopsInput(
   }
 
   // Parse intent — tries rule-based first, then LLM fallback
-  const intent = await orchestrator.parseDevOpsNaturalLanguage(input);
+  const intent = await withSpinner("Analyzing intent...", () => orchestrator.parseDevOpsNaturalLanguage(input));
 
   if (intent.command === "unknown") {
     console.log(
@@ -540,7 +532,7 @@ async function handleDevopsInput(
     return { exitMode: false };
   }
 
-  const result = await executeDevOpsIntent(orchestrator, reader, intent);
+  const result = await withSpinner("Executing DevOps command...", () => executeDevOpsIntent(orchestrator, reader, intent));
 
   if (typeof result === "string") {
     console.log(panel("DevOps", [result]));
@@ -765,7 +757,7 @@ async function handleGitInput(
   }
 
   // Parse intent — tries rule-based first, then LLM fallback
-  const intent = await orchestrator.parseGitNaturalLanguage(input);
+  const intent = await withSpinner("Analyzing intent...", () => orchestrator.parseGitNaturalLanguage(input));
 
   if (intent.command === "unknown") {
     console.log(
@@ -777,7 +769,7 @@ async function handleGitInput(
   }
 
   // Route the resolved intent to the appropriate operation
-  const result = await executeGitIntent(orchestrator, reader, intent);
+  const result = await withSpinner("Running git operation...", () => executeGitIntent(orchestrator, reader, intent));
 
   if (typeof result === "string") {
     console.log(panel("Git", [result]));
@@ -971,7 +963,7 @@ async function handleSecurityInput(
     return { exitMode: false };
   }
 
-  const intent = await orchestrator.parseSecurityNaturalLanguage(input);
+  const intent = await withSpinner("Analyzing intent...", () => orchestrator.parseSecurityNaturalLanguage(input));
 
   if (intent.command === "unknown") {
     console.log(
@@ -982,7 +974,7 @@ async function handleSecurityInput(
     return { exitMode: false };
   }
 
-  const result = await executeSecurityIntent(orchestrator, reader, intent);
+  const result = await withSpinner("Analyzing security...", () => executeSecurityIntent(orchestrator, reader, intent));
 
   if (typeof result === "string") {
     console.log(panel("Security", [result]));
@@ -1010,6 +1002,7 @@ async function executeSecurityIntent(
       return orchestrator.getSecurityScanFile(filePath);
     }
     case "rules": return orchestrator.getSecurityScanRules();
+    case "status": return orchestrator.getSecurityStatus();
 
     // Secret Detection
     case "secrets": return orchestrator.getSecuritySecrets();

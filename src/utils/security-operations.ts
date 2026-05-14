@@ -11,7 +11,8 @@ import path from "path";
 import { exec } from "child_process";
 import chalk from "chalk";
 import { paths } from "../config/paths";
-import { runCodeScan, formatScanReport, ScanReport } from "./code-scanner";
+import { runCodeScan, formatScanReport, ScanReport, saveScanLog, ScanFinding } from "./code-scanner";
+import crypto from "crypto";
 import { checkAiHealth, aiAnalyzeScanResults } from "./llm";
 import { getChangedFiles, getCurrentBranch } from "./git";
 import { validateBranchName, validateCommitMessage, getGitFlowGuide } from "./git-policy";
@@ -40,13 +41,141 @@ function runShell(cmd: string, cwd: string): Promise<{ stdout: string; stderr: s
   });
 }
 
+async function getFileHash(filePath: string): Promise<string> {
+  try {
+    const content = await fs.readFile(filePath);
+    return crypto.createHash("md5").update(content).digest("hex");
+  } catch {
+    return "";
+  }
+}
+
+interface ScanCache {
+  lastScanAt: string;
+  files: Record<string, string>; // filePath -> hash
+  findings: ScanFinding[];
+}
+
 // ---------------------------------------------------------------------------
 // A — Code Scanning (NFR Static Analysis)
 // ---------------------------------------------------------------------------
 
+async function detectFileChanges(): Promise<{ 
+  files: string[], 
+  changedFiles: string[], 
+  currentHashes: Record<string, string>, 
+  cache: ScanCache | null 
+}> {
+  const cachePath = path.join(process.cwd(), ".sdlc", "security-scan-cache.json");
+  let cache: ScanCache | null = null;
+  
+  try {
+    const cacheData = await fs.readFile(cachePath, "utf8");
+    cache = JSON.parse(cacheData);
+  } catch {
+    // No cache yet
+  }
+
+  const scannableExtensions = [".ts", ".js", ".json", ".env", ".yaml", ".yml"];
+  async function collectAllFiles(dir: string): Promise<string[]> {
+    const files: string[] = [];
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (![".git", "node_modules", "dist", ".sdlc"].includes(entry.name)) {
+          files.push(...(await collectAllFiles(fullPath)));
+        }
+      } else {
+        if (scannableExtensions.includes(path.extname(entry.name).toLowerCase()) || [".env", ".env.example"].includes(entry.name)) {
+          files.push(fullPath);
+        }
+      }
+    }
+    return files;
+  }
+
+  const files = await collectAllFiles(paths.repoDir);
+  const changedFiles: string[] = [];
+  const currentHashes: Record<string, string> = {};
+
+  for (const f of files) {
+    const hash = await getFileHash(f);
+    currentHashes[f] = hash;
+    if (!cache || cache.files[f] !== hash) {
+      changedFiles.push(f);
+    }
+  }
+
+  return { files, changedFiles, currentHashes, cache };
+}
+
 export async function runFullScan(): Promise<string[]> {
-  const report = await runCodeScan(paths.repoDir);
+  const { files, changedFiles, currentHashes, cache } = await detectFileChanges();
+  const cachePath = path.join(process.cwd(), ".sdlc", "security-scan-cache.json");
+
+  let report: ScanReport;
+  if (cache && changedFiles.length === 0) {
+    // Use cached results
+    report = {
+      scannedFiles: files.length,
+      totalFindings: cache.findings.length,
+      errors: cache.findings.filter(f => f.severity === "ERROR").length,
+      warnings: cache.findings.filter(f => f.severity === "WARNING").length,
+      infos: cache.findings.filter(f => f.severity === "INFO").length,
+      findings: cache.findings,
+      scannedAt: cache.lastScanAt
+    };
+  } else {
+    // Scan changed files
+    const scanResult = await runCodeScan(paths.repoDir, changedFiles.length > 0 ? changedFiles : undefined);
+    
+    if (cache && changedFiles.length > 0) {
+      // Merge: remove old findings for changed files, add new ones
+      const normalizedChanged = changedFiles.map(f => f.replace(/\\/g, "/"));
+      const keptFindings = cache.findings.filter(f => !normalizedChanged.includes(f.filePath));
+      const mergedFindings = [...keptFindings, ...scanResult.findings];
+      
+      report = {
+        ...scanResult,
+        scannedFiles: files.length, // total in project
+        findings: mergedFindings,
+        totalFindings: mergedFindings.length,
+        errors: mergedFindings.filter(f => f.severity === "ERROR").length,
+        warnings: mergedFindings.filter(f => f.severity === "WARNING").length,
+        infos: mergedFindings.filter(f => f.severity === "INFO").length,
+      };
+    } else {
+      report = scanResult;
+    }
+
+    // Update cache
+    const newCache: ScanCache = {
+      lastScanAt: report.scannedAt,
+      files: currentHashes,
+      findings: report.findings
+    };
+    await fs.mkdir(path.dirname(cachePath), { recursive: true });
+    await fs.writeFile(cachePath, JSON.stringify(newCache, null, 2));
+    
+    // Save Log
+    const logPath = await saveScanLog(report);
+    if (logPath) {
+      // Add a note to the report that it was saved
+    }
+  }
+
   const formatted = formatScanReport(report);
+  const incrementalNote = changedFiles.length > 0 
+    ? chalk.yellow(`Incremental scan: ${changedFiles.length} file(s) changed.`) 
+    : cache 
+      ? chalk.green("No changes detected. Using cached results.") 
+      : chalk.blue("First run: Full codebase scan performed.");
+
+  const finalOutput = [
+    incrementalNote,
+    ...formatted
+  ];
   
   if (report.findings.length > 0) {
     const analysis = await aiAnalyzeScanResults(
@@ -54,15 +183,45 @@ export async function runFullScan(): Promise<string[]> {
       report.findings,
       "Prioritize these SAST findings, identify false positives, and suggest remediation strategies."
     );
-    return [
-      ...formatted,
-      "",
-      chalk.bold.underline.blue("── AI Security Analysis ──"),
-      ...analysis.map(line => `  ${chalk.cyan(line)}`)
-    ];
+    finalOutput.push("");
+    finalOutput.push(chalk.bold.underline.blue("── AI Security Analysis ──"));
+    finalOutput.push(...analysis.map(line => `  ${chalk.cyan(line)}`));
   }
   
-  return formatted;
+  return finalOutput;
+}
+
+export async function getSecurityScanStatus(): Promise<string[]> {
+  const { files, changedFiles, cache } = await detectFileChanges();
+  
+  const lines: string[] = [
+    chalk.bold.blue("Security Scan Status:"),
+    `  Total scannable files: ${chalk.cyan(files.length)}`,
+    `  Last scan: ${cache ? chalk.gray(cache.lastScanAt) : chalk.red("Never")}`,
+    "",
+  ];
+
+  if (!cache) {
+    lines.push(chalk.yellow("⚠ No scan cache found. Next 'scan' will be a full codebase scan."));
+    return lines;
+  }
+
+  if (changedFiles.length === 0) {
+    lines.push(chalk.green("✓ All files are up to date. Next 'scan' will use cached results."));
+  } else {
+    lines.push(chalk.bold.yellow(`${changedFiles.length} file(s) changed since last scan:`));
+    for (const f of changedFiles.slice(0, 10)) {
+      const shortPath = f.replace(paths.repoDir, "").replace(/\\/g, "/");
+      lines.push(`  • ${chalk.yellow(shortPath)}`);
+    }
+    if (changedFiles.length > 10) {
+      lines.push(`  ... and ${changedFiles.length - 10} more`);
+    }
+    lines.push("");
+    lines.push(chalk.italic.gray("Run 'scan' to analyze these changes."));
+  }
+
+  return lines;
 }
 
 export async function runScanErrorsOnly(): Promise<string[]> {

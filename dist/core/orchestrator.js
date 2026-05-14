@@ -335,6 +335,7 @@ class Orchestrator {
     // Dashboard
     async getSecurityDashboard() { return (0, security_operations_1.getSecurityDashboard)(); }
     async getSecurityPosture() { return (0, security_operations_1.getSecurityPosture)(); }
+    async getSecurityStatus() { return (0, security_operations_1.getSecurityScanStatus)(); }
     // NL parsing
     async parseSecurityNaturalLanguage(input) {
         return (0, security_nl_parser_1.parseSecurityIntentWithLlm)(input);

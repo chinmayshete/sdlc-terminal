@@ -58,6 +58,15 @@ const RULES = [
         ],
         extract: (_m, raw) => ({ command: "rules", args: [], raw, source: "rule" }),
     },
+    {
+        patterns: [
+            /^status$/i,
+            /^(?:show\s+)?(?:scan\s+)?status$/i,
+            /^(?:what\s+is\s+)?(?:the\s+)?(?:scan\s+)?status\??$/i,
+            /^(?:check\s+)?(?:file\s+)?changes\??$/i,
+        ],
+        extract: (_m, raw) => ({ command: "status", args: [], raw, source: "rule" }),
+    },
     // Secrets
     {
         patterns: [
@@ -212,7 +221,7 @@ async function parseSecurityIntentWithLlm(input) {
                     {
                         role: "system",
                         content: `You are a security command parser. Given a natural language sentence, return JSON: {"command": string, "args": string[]}.
-Valid commands: scan, scan-errors, scan-warnings, scan-summary, scan-file, rules, secrets, env-audit, sensitive-fields, deps-audit, licenses, vault, config-security, compliance, gitflow, codeowners, docker-security, terraform-security, dashboard, posture.
+Valid commands: scan, scan-errors, scan-warnings, scan-summary, scan-file, rules, status, secrets, env-audit, sensitive-fields, deps-audit, licenses, vault, config-security, compliance, gitflow, codeowners, docker-security, terraform-security, dashboard, posture.
 For scan-file, args=["filepath"]. All others have args=[].
 If you cannot determine the intent, return {"command": "unknown", "args": []}.`,
                     },
@@ -246,6 +255,7 @@ function getSecurityCommandHelp() {
         "  scan warnings        Show only WARNING findings",
         "  scan summary         Quick scan statistics",
         "  scan file <path>     Scan a specific file",
+        "  status               Show file changes since last scan",
         "",
         "── Secret Detection ──",
         "  secrets              Check for hardcoded secrets (Gitleaks)",

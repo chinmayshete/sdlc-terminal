@@ -11,6 +11,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.runCodeScan = runCodeScan;
 exports.formatScanReport = formatScanReport;
+exports.saveScanLog = saveScanLog;
 const fs_1 = require("fs");
 const path_1 = __importDefault(require("path"));
 const chalk_1 = __importDefault(require("chalk"));
@@ -119,8 +120,8 @@ const SKIP_FILES_FOR_RULES = {
         "package-lock.json",
     ],
 };
-async function runCodeScan(scanDir) {
-    const files = await collectFiles(scanDir);
+async function runCodeScan(scanDir, filesToScan) {
+    const files = filesToScan || (await collectFiles(scanDir));
     const findings = [];
     for (const filePath of files) {
         const content = await fs_1.promises.readFile(filePath, "utf8");
@@ -208,6 +209,22 @@ function formatScanReport(report) {
     }
     lines.push(chalk_1.default.italic.gray("Remediation: Address findings based on severity and category risk."));
     return lines;
+}
+async function saveScanLog(report) {
+    const logDir = path_1.default.join(process.cwd(), ".sdlc", "logs");
+    try {
+        await fs_1.promises.mkdir(logDir, { recursive: true });
+        const now = new Date();
+        const date = now.toISOString().split("T")[0].replace(/-/g, "");
+        const time = now.toTimeString().split(" ")[0].replace(/:/g, "");
+        const logFile = path_1.default.join(logDir, `nexus-security-report_${date}_${time}.json`);
+        await fs_1.promises.writeFile(logFile, JSON.stringify(report, null, 2));
+        return logFile;
+    }
+    catch (err) {
+        console.error("Failed to save scan log:", err);
+        return "";
+    }
 }
 function redactMatch(content) {
     if (content.length <= 10)

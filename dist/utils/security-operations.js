@@ -11,6 +11,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.runFullScan = runFullScan;
+exports.getSecurityScanStatus = getSecurityScanStatus;
 exports.runScanErrorsOnly = runScanErrorsOnly;
 exports.runScanWarningsOnly = runScanWarningsOnly;
 exports.runScanSummary = runScanSummary;
@@ -36,6 +37,7 @@ const child_process_1 = require("child_process");
 const chalk_1 = __importDefault(require("chalk"));
 const paths_1 = require("../config/paths");
 const code_scanner_1 = require("./code-scanner");
+const crypto_1 = __importDefault(require("crypto"));
 const llm_1 = require("./llm");
 const git_1 = require("./git");
 const git_policy_1 = require("./git-policy");
@@ -57,22 +59,156 @@ function runShell(cmd, cwd) {
         });
     });
 }
+async function getFileHash(filePath) {
+    try {
+        const content = await fs_1.promises.readFile(filePath);
+        return crypto_1.default.createHash("md5").update(content).digest("hex");
+    }
+    catch {
+        return "";
+    }
+}
 // ---------------------------------------------------------------------------
 // A — Code Scanning (NFR Static Analysis)
 // ---------------------------------------------------------------------------
+async function detectFileChanges() {
+    const cachePath = path_1.default.join(process.cwd(), ".sdlc", "security-scan-cache.json");
+    let cache = null;
+    try {
+        const cacheData = await fs_1.promises.readFile(cachePath, "utf8");
+        cache = JSON.parse(cacheData);
+    }
+    catch {
+        // No cache yet
+    }
+    const scannableExtensions = [".ts", ".js", ".json", ".env", ".yaml", ".yml"];
+    async function collectAllFiles(dir) {
+        const files = [];
+        const entries = await fs_1.promises.readdir(dir, { withFileTypes: true });
+        for (const entry of entries) {
+            const fullPath = path_1.default.join(dir, entry.name);
+            if (entry.isDirectory()) {
+                if (![".git", "node_modules", "dist", ".sdlc"].includes(entry.name)) {
+                    files.push(...(await collectAllFiles(fullPath)));
+                }
+            }
+            else {
+                if (scannableExtensions.includes(path_1.default.extname(entry.name).toLowerCase()) || [".env", ".env.example"].includes(entry.name)) {
+                    files.push(fullPath);
+                }
+            }
+        }
+        return files;
+    }
+    const files = await collectAllFiles(paths_1.paths.repoDir);
+    const changedFiles = [];
+    const currentHashes = {};
+    for (const f of files) {
+        const hash = await getFileHash(f);
+        currentHashes[f] = hash;
+        if (!cache || cache.files[f] !== hash) {
+            changedFiles.push(f);
+        }
+    }
+    return { files, changedFiles, currentHashes, cache };
+}
 async function runFullScan() {
-    const report = await (0, code_scanner_1.runCodeScan)(paths_1.paths.repoDir);
+    const { files, changedFiles, currentHashes, cache } = await detectFileChanges();
+    const cachePath = path_1.default.join(process.cwd(), ".sdlc", "security-scan-cache.json");
+    let report;
+    if (cache && changedFiles.length === 0) {
+        // Use cached results
+        report = {
+            scannedFiles: files.length,
+            totalFindings: cache.findings.length,
+            errors: cache.findings.filter(f => f.severity === "ERROR").length,
+            warnings: cache.findings.filter(f => f.severity === "WARNING").length,
+            infos: cache.findings.filter(f => f.severity === "INFO").length,
+            findings: cache.findings,
+            scannedAt: cache.lastScanAt
+        };
+    }
+    else {
+        // Scan changed files
+        const scanResult = await (0, code_scanner_1.runCodeScan)(paths_1.paths.repoDir, changedFiles.length > 0 ? changedFiles : undefined);
+        if (cache && changedFiles.length > 0) {
+            // Merge: remove old findings for changed files, add new ones
+            const normalizedChanged = changedFiles.map(f => f.replace(/\\/g, "/"));
+            const keptFindings = cache.findings.filter(f => !normalizedChanged.includes(f.filePath));
+            const mergedFindings = [...keptFindings, ...scanResult.findings];
+            report = {
+                ...scanResult,
+                scannedFiles: files.length, // total in project
+                findings: mergedFindings,
+                totalFindings: mergedFindings.length,
+                errors: mergedFindings.filter(f => f.severity === "ERROR").length,
+                warnings: mergedFindings.filter(f => f.severity === "WARNING").length,
+                infos: mergedFindings.filter(f => f.severity === "INFO").length,
+            };
+        }
+        else {
+            report = scanResult;
+        }
+        // Update cache
+        const newCache = {
+            lastScanAt: report.scannedAt,
+            files: currentHashes,
+            findings: report.findings
+        };
+        await fs_1.promises.mkdir(path_1.default.dirname(cachePath), { recursive: true });
+        await fs_1.promises.writeFile(cachePath, JSON.stringify(newCache, null, 2));
+        // Save Log
+        const logPath = await (0, code_scanner_1.saveScanLog)(report);
+        if (logPath) {
+            // Add a note to the report that it was saved
+        }
+    }
     const formatted = (0, code_scanner_1.formatScanReport)(report);
+    const incrementalNote = changedFiles.length > 0
+        ? chalk_1.default.yellow(`Incremental scan: ${changedFiles.length} file(s) changed.`)
+        : cache
+            ? chalk_1.default.green("No changes detected. Using cached results.")
+            : chalk_1.default.blue("First run: Full codebase scan performed.");
+    const finalOutput = [
+        incrementalNote,
+        ...formatted
+    ];
     if (report.findings.length > 0) {
         const analysis = await (0, llm_1.aiAnalyzeScanResults)("AI Deep Logical Scan", report.findings, "Prioritize these SAST findings, identify false positives, and suggest remediation strategies.");
-        return [
-            ...formatted,
-            "",
-            chalk_1.default.bold.underline.blue("── AI Security Analysis ──"),
-            ...analysis.map(line => `  ${chalk_1.default.cyan(line)}`)
-        ];
+        finalOutput.push("");
+        finalOutput.push(chalk_1.default.bold.underline.blue("── AI Security Analysis ──"));
+        finalOutput.push(...analysis.map(line => `  ${chalk_1.default.cyan(line)}`));
     }
-    return formatted;
+    return finalOutput;
+}
+async function getSecurityScanStatus() {
+    const { files, changedFiles, cache } = await detectFileChanges();
+    const lines = [
+        chalk_1.default.bold.blue("Security Scan Status:"),
+        `  Total scannable files: ${chalk_1.default.cyan(files.length)}`,
+        `  Last scan: ${cache ? chalk_1.default.gray(cache.lastScanAt) : chalk_1.default.red("Never")}`,
+        "",
+    ];
+    if (!cache) {
+        lines.push(chalk_1.default.yellow("⚠ No scan cache found. Next 'scan' will be a full codebase scan."));
+        return lines;
+    }
+    if (changedFiles.length === 0) {
+        lines.push(chalk_1.default.green("✓ All files are up to date. Next 'scan' will use cached results."));
+    }
+    else {
+        lines.push(chalk_1.default.bold.yellow(`${changedFiles.length} file(s) changed since last scan:`));
+        for (const f of changedFiles.slice(0, 10)) {
+            const shortPath = f.replace(paths_1.paths.repoDir, "").replace(/\\/g, "/");
+            lines.push(`  • ${chalk_1.default.yellow(shortPath)}`);
+        }
+        if (changedFiles.length > 10) {
+            lines.push(`  ... and ${changedFiles.length - 10} more`);
+        }
+        lines.push("");
+        lines.push(chalk_1.default.italic.gray("Run 'scan' to analyze these changes."));
+    }
+    return lines;
 }
 async function runScanErrorsOnly() {
     const report = await (0, code_scanner_1.runCodeScan)(paths_1.paths.repoDir);
