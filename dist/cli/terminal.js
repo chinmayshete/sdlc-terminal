@@ -40,39 +40,44 @@ async function runTerminal(orchestrator) {
         }
         let shouldClose = false;
         try {
+            let result;
             if (mode === "nlp") {
-                const next = await handleNlpInput(orchestrator, input, nlpState);
-                nlpState = next.state;
-                if (next.exitMode) {
+                result = await (0, spinner_1.withSpinner)("Analyzing request...", () => handleNlpInput(orchestrator, input, nlpState));
+                nlpState = result.state || nlpState;
+                if (result.exitMode) {
                     mode = "command";
                     nlpState = createNlpSessionState();
                 }
             }
             else if (mode === "devops") {
-                const next = await handleDevopsInput(orchestrator, reader, input);
-                if (next.exitMode) {
+                result = await (0, spinner_1.withSpinner)("Executing DevOps command...", () => handleDevopsInput(orchestrator, reader, input));
+                if (result.exitMode) {
                     mode = "command";
                 }
             }
             else if (mode === "git") {
-                const next = await handleGitInput(orchestrator, reader, input);
-                if (next.exitMode) {
+                result = await (0, spinner_1.withSpinner)("Running git operation...", () => handleGitInput(orchestrator, reader, input));
+                if (result.exitMode) {
                     mode = "command";
                 }
             }
             else if (mode === "security") {
-                const next = await handleSecurityInput(orchestrator, reader, input);
-                if (next.exitMode) {
+                result = await (0, spinner_1.withSpinner)("Analyzing security...", () => handleSecurityInput(orchestrator, reader, input));
+                if (result.exitMode) {
                     mode = "command";
                 }
             }
             else {
-                const next = await handleCommandInput(orchestrator, reader, input);
-                mode = next.mode;
+                result = await (0, spinner_1.withSpinner)("Processing command...", () => handleCommandInput(orchestrator, reader, input));
+                mode = result.mode || mode;
                 if (mode === "nlp") {
                     nlpState = createNlpSessionState();
                 }
-                shouldClose = next.closeTerminal;
+                shouldClose = result.closeTerminal || false;
+            }
+            // Print output after spinner has stopped and cleared the line
+            if (result.output) {
+                console.log(result.output);
             }
         }
         catch (error) {
@@ -98,153 +103,213 @@ async function handleCommandInput(orchestrator, reader, input) {
     switch (command) {
         case "tickets": {
             const tickets = await orchestrator.listTickets();
-            console.log((0, theme_1.panel)("Tickets", tickets.length > 0
-                ? tickets.map((ticket) => (0, ticket_catalog_1.formatTicket)(ticket))
-                : ["No tickets found."]));
-            return { mode: "command", closeTerminal: false };
+            return {
+                mode: "command",
+                closeTerminal: false,
+                output: (0, theme_1.panel)("Tickets", tickets.length > 0
+                    ? tickets.map((ticket) => (0, ticket_catalog_1.formatTicket)(ticket))
+                    : ["No tickets found."]),
+            };
         }
         case "plan": {
             const ticketId = args[0];
             if (!ticketId) {
-                console.log((0, theme_1.warning)("Usage: plan <ticketId> [detailed]"));
-                return { mode: "command", closeTerminal: false };
+                return {
+                    mode: "command",
+                    closeTerminal: false,
+                    output: (0, theme_1.warning)("Usage: plan <ticketId> [detailed]"),
+                };
             }
-            const isDetailed = args[1]?.toLowerCase() === "detailed" || args[1]?.toLowerCase() === "comprehensive";
-            const plan = await (0, spinner_1.withSpinner)(`Generating ${isDetailed ? "comprehensive " : ""}plan...`, () => orchestrator.plan(ticketId, isDetailed ? "detailed" : "basic"));
-            console.log((0, theme_1.panel)(`${isDetailed ? "Comprehensive " : ""}Plan ${ticketId}`, plan.steps.map((step, index) => `${index + 1}. ${step}`)));
-            return { mode: "command", closeTerminal: false };
+            const isDetailed = args[1]?.toLowerCase() === "detailed" ||
+                args[1]?.toLowerCase() === "comprehensive";
+            const plan = await orchestrator.plan(ticketId, isDetailed ? "detailed" : "basic");
+            return {
+                mode: "command",
+                closeTerminal: false,
+                output: (0, theme_1.panel)(`${isDetailed ? "Comprehensive " : ""}Plan ${ticketId}`, plan.steps.map((step, index) => `${index + 1}. ${step}`)),
+            };
         }
         case "execute": {
             const ticketId = args[0];
             if (!ticketId) {
-                console.log((0, theme_1.warning)("Usage: execute <ticketId>"));
-                return { mode: "command", closeTerminal: false };
+                return {
+                    mode: "command",
+                    closeTerminal: false,
+                    output: (0, theme_1.warning)("Usage: execute <ticketId>"),
+                };
             }
-            const result = await (0, spinner_1.withSpinner)("Executing ticket...", () => orchestrator.execute(ticketId));
-            console.log((0, theme_1.panel)(`Execution ${ticketId}`, [
-                `${chalk_1.default.bold("Updated files:")} ${result.updatedFiles.length > 0 ? chalk_1.default.cyan(result.updatedFiles.join(", ")) : chalk_1.default.gray("none")}`,
-                `${chalk_1.default.bold("Generated tests:")} ${result.generatedTests.length > 0 ? chalk_1.default.cyan(result.generatedTests.join(", ")) : chalk_1.default.gray("none")}`,
-                `${chalk_1.default.bold("Ticket status:")} ${chalk_1.default.bold.yellow(result.ticketStatus)}`,
-                chalk_1.default.italic.gray("No git commit or push was performed."),
-            ]));
-            return { mode: "command", closeTerminal: false };
+            const result = await orchestrator.execute(ticketId);
+            return {
+                mode: "command",
+                closeTerminal: false,
+                output: (0, theme_1.panel)(`Execution ${ticketId}`, [
+                    `${chalk_1.default.bold("Updated files:")} ${result.updatedFiles.length > 0 ? chalk_1.default.cyan(result.updatedFiles.join(", ")) : chalk_1.default.gray("none")}`,
+                    `${chalk_1.default.bold("Generated tests:")} ${result.generatedTests.length > 0 ? chalk_1.default.cyan(result.generatedTests.join(", ")) : chalk_1.default.gray("none")}`,
+                    `${chalk_1.default.bold("Ticket status:")} ${chalk_1.default.bold.yellow(result.ticketStatus)}`,
+                    chalk_1.default.italic.gray("No git commit or push was performed."),
+                ]),
+            };
         }
         case "status": {
             const status = await orchestrator.status("command");
-            console.log((0, theme_1.panel)("Ticket Status", [
-                `Current mode: ${status.currentMode}`,
-                `AI mode: ${status.ai.mode}`,
-                `AI configured: ${status.ai.configured ? "yes" : "no"}`,
-                ...renderTicketStatuses(status.tickets),
-            ]));
-            return { mode: "command", closeTerminal: false };
+            return {
+                mode: "command",
+                closeTerminal: false,
+                output: (0, theme_1.panel)("Ticket Status", [
+                    `Current mode: ${status.currentMode}`,
+                    `AI mode: ${status.ai.mode}`,
+                    `AI configured: ${status.ai.configured ? "yes" : "no"}`,
+                    ...renderTicketStatuses(status.tickets),
+                ]),
+            };
         }
         case "ai": {
             const health = await orchestrator.aiHealth();
-            const reachableColor = health.reachable ? chalk_1.default.bold.green : chalk_1.default.bold.red;
-            console.log((0, theme_1.panel)("AI Health", [
-                `Mode: ${chalk_1.default.bold.cyan(health.mode)}`,
-                `Configured: ${health.configured ? chalk_1.default.green("yes") : chalk_1.default.red("no")}`,
-                `Reachable: ${reachableColor(health.reachable ? "yes" : "no")}`,
-                `Message: ${chalk_1.default.gray(health.message)}`,
-            ]));
-            return { mode: "command", closeTerminal: false };
+            const reachableColor = health.reachable
+                ? chalk_1.default.bold.green
+                : chalk_1.default.bold.red;
+            return {
+                mode: "command",
+                closeTerminal: false,
+                output: (0, theme_1.panel)("AI Health", [
+                    `Mode: ${chalk_1.default.bold.cyan(health.mode)}`,
+                    `Configured: ${health.configured ? chalk_1.default.green("yes") : chalk_1.default.red("no")}`,
+                    `Reachable: ${reachableColor(health.reachable ? "yes" : "no")}`,
+                    `Message: ${chalk_1.default.gray(health.message)}`,
+                ]),
+            };
         }
         case "security": {
-            console.log((0, theme_1.panel)("Security Mode", [
-                "Code scanning, secrets, vault, compliance & infrastructure.",
-                "Commands: scan | secrets | vault | compliance | docker",
-                "  terraform | audit | licenses | dashboard | posture",
-                'Or type naturally: "check for secrets",',
-                '  "is the Dockerfile secure", "how secure are we"',
-                'Type "help" for full reference, "exit" to leave.',
-            ]));
-            return { mode: "security", closeTerminal: false };
+            return {
+                mode: "security",
+                closeTerminal: false,
+                output: (0, theme_1.panel)("Security Mode", [
+                    "Code scanning, secrets, vault, compliance & infrastructure.",
+                    "Commands: scan | secrets | vault | compliance | docker",
+                    "  terraform | audit | licenses | dashboard | posture",
+                    'Or type naturally: "check for secrets",',
+                    '  "is the Dockerfile secure", "how secure are we"',
+                    'Type "help" for full reference, "exit" to leave.',
+                ]),
+            };
         }
         case "nlp": {
-            console.log((0, theme_1.panel)("NLP Mode", [
-                "Free chat mode with access to the local workspace.",
-                'Chat naturally: "hi", "summarize the auth flow", "how does src/routes.ts work?"',
-                'Edit directly: "edit src/routes.ts: add versioned api routes"',
-                "Tools: explain <file>, show diff, undo last nlp change, exit",
-            ]));
-            return { mode: "nlp", closeTerminal: false };
+            return {
+                mode: "nlp",
+                closeTerminal: false,
+                output: (0, theme_1.panel)("NLP Mode", [
+                    "Free chat mode with access to the local workspace.",
+                    'Chat naturally: "hi", "summarize the auth flow", "how does src/routes.ts work?"',
+                    'Edit directly: "edit src/routes.ts: add versioned api routes"',
+                    "Tools: explain <file>, show diff, undo last nlp change, exit",
+                ]),
+            };
         }
         case "devops": {
-            console.log((0, theme_1.panel)("DevOps Mode", [
-                "CI/CD, Security, Docker, Terraform, Env & Deployment.",
-                "Commands: cicd | scan | docker | terraform | env | deps",
-                "  deploy | health | pr check | summary | changed",
-                'Or type naturally: "validate the Jenkinsfile",',
-                '  "check for vulnerabilities", "is everything healthy"',
-                'Type "help" for full reference, "exit" to leave.',
-            ]));
-            return { mode: "devops", closeTerminal: false };
+            return {
+                mode: "devops",
+                closeTerminal: false,
+                output: (0, theme_1.panel)("DevOps Mode", [
+                    "CI/CD, Security, Docker, Terraform, Env & Deployment.",
+                    "Commands: cicd | scan | docker | terraform | env | deps",
+                    "  deploy | health | pr check | summary | changed",
+                    'Or type naturally: "validate the Jenkinsfile",',
+                    '  "check for vulnerabilities", "is everything healthy"',
+                    'Type "help" for full reference, "exit" to leave.',
+                ]),
+            };
         }
         case "git": {
-            console.log((0, theme_1.panel)("Git Mode", [
-                "Full Git operations with natural language support.",
-                "Commands: status | log | diff | add | commit | branch,",
-                "  checkout | pull | push | stash | tag | remote | blame,",
-                "  cherry-pick | reset | merge | fetch | show",
-                'Or type naturally: "show me what changed",',
-                '  "commit everything with message fix auth bug"',
-                'Type "help" for full reference, "exit" to leave.',
-            ]));
-            return { mode: "git", closeTerminal: false };
+            return {
+                mode: "git",
+                closeTerminal: false,
+                output: (0, theme_1.panel)("Git Mode", [
+                    "Full Git operations with natural language support.",
+                    "Commands: status | log | diff | add | commit | branch,",
+                    "  checkout | pull | push | stash | tag | remote | blame,",
+                    "  cherry-pick | reset | merge | fetch | show",
+                    'Or type naturally: "show me what changed",',
+                    '  "commit everything with message fix auth bug"',
+                    'Type "help" for full reference, "exit" to leave.',
+                ]),
+            };
         }
         case "push": {
             const ticketId = args[0];
             if (!ticketId) {
-                console.log((0, theme_1.warning)("Usage: push <ticketId>"));
-                return { mode: "command", closeTerminal: false };
+                return {
+                    mode: "command",
+                    closeTerminal: false,
+                    output: (0, theme_1.warning)("Usage: push <ticketId>"),
+                };
             }
             const allowed = await askYesNo(reader, `Push ${ticketId} to git remote now? (yes/no) `);
             if (!allowed) {
-                console.log((0, theme_1.warning)("Push cancelled."));
-                return { mode: "command", closeTerminal: false };
+                return {
+                    mode: "command",
+                    closeTerminal: false,
+                    output: (0, theme_1.warning)("Push cancelled."),
+                };
             }
-            const result = await (0, spinner_1.withSpinner)("Pushing to remote...", () => orchestrator.push(ticketId));
-            console.log((0, theme_1.panel)("Push Result", [result]));
-            return { mode: "command", closeTerminal: false };
+            const result = await orchestrator.push(ticketId);
+            return {
+                mode: "command",
+                closeTerminal: false,
+                output: (0, theme_1.panel)("Push Result", [result]),
+            };
         }
         case "help": {
-            console.log((0, theme_1.panel)("Help", [
-                "tickets            List local tickets",
-                "plan AUTH-101      Build a plan for a ticket",
-                "execute AUTH-101   Generate code and tests locally",
-                "status             Show ticket statuses",
-                "ai                 Verify Azure or mock AI mode",
-                "security           Enter Security assistant mode",
-                "nlp                Enter free-form repo chat mode",
-                "devops             Enter DevOps assistant mode",
-                "git                Enter Git operations mode",
-                "push AUTH-101      Push only after in-terminal approval",
-                "reset AUTH-101     Reset one ticket status back to TODO",
-                "reset-all          Reset every tracked ticket status",
-                "exit               Close the terminal",
-            ]));
-            return { mode: "command", closeTerminal: false };
+            return {
+                mode: "command",
+                closeTerminal: false,
+                output: (0, theme_1.panel)("Help", [
+                    "tickets            List local tickets",
+                    "plan AUTH-101      Build a plan for a ticket",
+                    "execute AUTH-101   Generate code and tests locally",
+                    "status             Show ticket statuses",
+                    "ai                 Verify Azure or mock AI mode",
+                    "security           Enter Security assistant mode",
+                    "nlp                Enter free-form repo chat mode",
+                    "devops             Enter DevOps assistant mode",
+                    "git                Enter Git operations mode",
+                    "push AUTH-101      Push only after in-terminal approval",
+                    "reset AUTH-101     Reset one ticket status back to TODO",
+                    "reset-all          Reset every tracked ticket status",
+                    "exit               Close the terminal",
+                ]),
+            };
         }
         case "reset": {
             const ticketId = args[0];
             if (ticketId?.toLowerCase() === "all") {
                 await orchestrator.resetAllTicketStatuses();
-                console.log((0, theme_1.panel)("Reset", ["All ticket statuses were reset to TODO."]));
-                return { mode: "command", closeTerminal: false };
+                return {
+                    mode: "command",
+                    closeTerminal: false,
+                    output: (0, theme_1.panel)("Reset", ["All ticket statuses were reset to TODO."]),
+                };
             }
             if (!ticketId) {
-                console.log((0, theme_1.warning)("Usage: reset <ticketId>"));
-                return { mode: "command", closeTerminal: false };
+                return {
+                    mode: "command",
+                    closeTerminal: false,
+                    output: (0, theme_1.warning)("Usage: reset <ticketId>"),
+                };
             }
             await orchestrator.resetTicketStatus(ticketId);
-            console.log((0, theme_1.panel)("Reset", [`Ticket ${ticketId} status was reset to TODO.`]));
-            return { mode: "command", closeTerminal: false };
+            return {
+                mode: "command",
+                closeTerminal: false,
+                output: (0, theme_1.panel)("Reset", [`Ticket ${ticketId} status was reset to TODO.`]),
+            };
         }
         case "reset-all": {
             await orchestrator.resetAllTicketStatuses();
-            console.log((0, theme_1.panel)("Reset", ["All ticket statuses were reset to TODO."]));
-            return { mode: "command", closeTerminal: false };
+            return {
+                mode: "command",
+                closeTerminal: false,
+                output: (0, theme_1.panel)("Reset", ["All ticket statuses were reset to TODO."]),
+            };
         }
         case "exit":
         case "quit":
@@ -261,12 +326,18 @@ async function handleCommandInput(orchestrator, reader, input) {
                         const ticketId = intent.args[0];
                         const isDetailed = intent.args[1] === "detailed";
                         if (!ticketId) {
-                            console.log((0, theme_1.warning)("Please specify a ticket ID (e.g., 'plan AUTH-101')"));
-                            return { mode: "command", closeTerminal: false };
+                            return {
+                                mode: "command",
+                                closeTerminal: false,
+                                output: (0, theme_1.warning)("Please specify a ticket ID (e.g., 'plan AUTH-101')"),
+                            };
                         }
                         const plan = await orchestrator.plan(ticketId, isDetailed ? "detailed" : "basic");
-                        console.log((0, theme_1.panel)(`${isDetailed ? "Comprehensive " : ""}Plan ${ticketId}`, plan.steps.map((step, index) => `${index + 1}. ${step}`)));
-                        return { mode: "command", closeTerminal: false };
+                        return {
+                            mode: "command",
+                            closeTerminal: false,
+                            output: (0, theme_1.panel)(`${isDetailed ? "Comprehensive " : ""}Plan ${ticketId}`, plan.steps.map((step, index) => `${index + 1}. ${step}`)),
+                        };
                     }
                     case "execute":
                         return handleCommandInput(orchestrator, reader, `execute ${intent.args[0] || ""}`);
@@ -293,43 +364,61 @@ async function handleCommandInput(orchestrator, reader, input) {
                     case "exit":
                         return { mode: "command", closeTerminal: true };
                     default:
-                        console.log((0, theme_1.danger)(`Unknown command: ${command}`));
-                        return { mode: "command", closeTerminal: false };
+                        return {
+                            mode: "command",
+                            closeTerminal: false,
+                            output: (0, theme_1.danger)(`Unknown command: ${command}`),
+                        };
                 }
             }
-            console.log((0, theme_1.danger)(`Unknown command: ${command}`));
-            return { mode: "command", closeTerminal: false };
+            return {
+                mode: "command",
+                closeTerminal: false,
+                output: (0, theme_1.danger)(`Unknown command: ${command}`),
+            };
         }
     }
 }
 async function handleNlpInput(orchestrator, input, state) {
     const normalized = input.toLowerCase();
     if (normalized === "exit" || normalized === "quit") {
-        console.log(chalk_1.default.bold.yellow("Leaving NLP mode."));
-        return { exitMode: true, state };
+        return {
+            exitMode: true,
+            state,
+            output: chalk_1.default.bold.yellow("Leaving NLP mode."),
+        };
     }
     if (normalized === "help") {
-        console.log((0, theme_1.panel)("NLP Help", [
-            'Chat normally: "hi", "summarize the repo", "what does auth.controller do?"',
-            'Target a file: "edit src/routes.ts: add versioned api routes"',
-            'Explain a file: "explain src/routes.ts"',
-            'General explanation: "explain the auth flow" or "explain me the code base"',
-            'Inspect changes: "show diff"',
-            'Rollback: "undo last nlp change"',
-        ]));
-        return { exitMode: false, state };
+        return {
+            exitMode: false,
+            state,
+            output: (0, theme_1.panel)("NLP Help", [
+                'Chat normally: "hi", "summarize the repo", "what does auth.controller do?"',
+                'Target a file: "edit src/routes.ts: add versioned api routes"',
+                'Explain a file: "explain src/routes.ts"',
+                'General explanation: "explain the auth flow" or "explain me the code base"',
+                'Inspect changes: "show diff"',
+                'Rollback: "undo last nlp change"',
+            ]),
+        };
     }
     if (normalized === "show diff") {
-        console.log((0, theme_1.panel)("Last Diff", state.lastDiff.length > 0
-            ? state.lastDiff
-            : ["No NLP changes to diff yet."]));
-        return { exitMode: false, state };
+        return {
+            exitMode: false,
+            state,
+            output: (0, theme_1.panel)("Last Diff", state.lastDiff.length > 0
+                ? state.lastDiff
+                : ["No NLP changes to diff yet."]),
+        };
     }
     if (normalized === "undo last nlp change") {
         const lastSnapshots = state.appliedSnapshots[state.appliedSnapshots.length - 1];
         if (!lastSnapshots) {
-            console.log((0, theme_1.panel)("Undo", ["No NLP change is available to undo."]));
-            return { exitMode: false, state };
+            return {
+                exitMode: false,
+                state,
+                output: (0, theme_1.panel)("Undo", ["No NLP change is available to undo."]),
+            };
         }
         await orchestrator.undoNlpChanges(lastSnapshots);
         const nextState = {
@@ -342,8 +431,11 @@ async function handleNlpInput(orchestrator, input, state) {
                 { role: "assistant", content: "I reverted the last NLP change set." },
             ],
         };
-        console.log((0, theme_1.panel)("Undo", ["Reverted the last NLP change set."]));
-        return { exitMode: false, state: nextState };
+        return {
+            exitMode: false,
+            state: nextState,
+            output: (0, theme_1.panel)("Undo", ["Reverted the last NLP change set."]),
+        };
     }
     if (normalized.startsWith("explain ")) {
         const target = input.slice("explain ".length).trim();
@@ -357,8 +449,11 @@ async function handleNlpInput(orchestrator, input, state) {
                     { role: "assistant", content: explanation },
                 ],
             };
-            console.log((0, theme_1.panel)(`Explain ${target}`, [explanation]));
-            return { exitMode: false, state: nextState };
+            return {
+                exitMode: false,
+                state: nextState,
+                output: (0, theme_1.panel)(`Explain ${target}`, [explanation]),
+            };
         }
     }
     const result = await (0, spinner_1.withSpinner)("Thinking...", () => orchestrator.runFreeNlpChat(state.history, input));
@@ -368,22 +463,17 @@ async function handleNlpInput(orchestrator, input, state) {
         { role: "assistant", content: result.message },
     ];
     if (result.changes.length === 0) {
-        console.log((0, theme_1.panel)("NLP", [result.message, "No files changed."]));
         return {
             exitMode: false,
             state: {
                 ...state,
                 history: nextHistory,
             },
+            output: (0, theme_1.panel)("NLP", [result.message, "No files changed."]),
         };
     }
     const snapshots = await (0, spinner_1.withSpinner)("Applying changes...", () => orchestrator.applyNlpChanges(result.changes));
     const diffLines = buildDiffLines(snapshots);
-    console.log((0, theme_1.panel)("NLP", [
-        result.message,
-        `Updated files: ${result.changes.map((change) => change.path).join(", ")}`,
-        'Use "show diff" to inspect or "undo last nlp change" to revert.',
-    ]));
     return {
         exitMode: false,
         state: {
@@ -391,32 +481,37 @@ async function handleNlpInput(orchestrator, input, state) {
             appliedSnapshots: [...state.appliedSnapshots, snapshots],
             lastDiff: diffLines,
         },
+        output: (0, theme_1.panel)("NLP", [
+            result.message,
+            `Updated files: ${result.changes.map((change) => change.path).join(", ")}`,
+            'Use "show diff" to inspect or "undo last nlp change" to revert.',
+        ]),
     };
 }
 async function handleDevopsInput(orchestrator, reader, input) {
     const normalized = input.toLowerCase().trim();
     if (normalized === "exit" || normalized === "quit") {
-        console.log(chalk_1.default.bold.yellow("Leaving DevOps mode."));
-        return { exitMode: true };
+        return { exitMode: true, output: chalk_1.default.bold.yellow("Leaving DevOps mode.") };
     }
     if (normalized === "help") {
-        console.log((0, theme_1.panel)("DevOps Help", orchestrator.getDevOpsHelp()));
-        return { exitMode: false };
+        return {
+            exitMode: false,
+            output: (0, theme_1.panel)("DevOps Help", orchestrator.getDevOpsHelp()),
+        };
     }
     // Parse intent — tries rule-based first, then LLM fallback
     const intent = await (0, spinner_1.withSpinner)("Analyzing intent...", () => orchestrator.parseDevOpsNaturalLanguage(input));
     if (intent.command === "unknown") {
-        console.log((0, theme_1.danger)(`Could not parse DevOps command. Type "help" for available commands.`));
-        return { exitMode: false };
+        return {
+            exitMode: false,
+            output: (0, theme_1.danger)(`Could not parse DevOps command. Type "help" for available commands.`),
+        };
     }
-    const result = await (0, spinner_1.withSpinner)("Executing DevOps command...", () => executeDevOpsIntent(orchestrator, reader, intent));
-    if (typeof result === "string") {
-        console.log((0, theme_1.panel)("DevOps", [result]));
-    }
-    else {
-        console.log((0, theme_1.panel)("DevOps", result));
-    }
-    return { exitMode: false };
+    const result = await executeDevOpsIntent(orchestrator, reader, intent);
+    return {
+        exitMode: false,
+        output: (0, theme_1.panel)("DevOps", typeof result === "string" ? [result] : result),
+    };
 }
 async function executeDevOpsIntent(orchestrator, reader, intent) {
     switch (intent.command) {
@@ -590,28 +685,25 @@ function looksLikeFilePath(value) {
 async function handleGitInput(orchestrator, reader, input) {
     const normalized = input.toLowerCase().trim();
     if (normalized === "exit" || normalized === "quit") {
-        console.log(chalk_1.default.bold.yellow("Leaving Git mode."));
-        return { exitMode: true };
+        return { exitMode: true, output: chalk_1.default.bold.yellow("Leaving Git mode.") };
     }
     if (normalized === "help") {
-        console.log((0, theme_1.panel)("Git Help", orchestrator.getGitHelp()));
-        return { exitMode: false };
+        return { exitMode: false, output: (0, theme_1.panel)("Git Help", orchestrator.getGitHelp()) };
     }
     // Parse intent — tries rule-based first, then LLM fallback
     const intent = await (0, spinner_1.withSpinner)("Analyzing intent...", () => orchestrator.parseGitNaturalLanguage(input));
     if (intent.command === "unknown") {
-        console.log((0, theme_1.danger)(`Could not parse git command. Type "help" for available commands.`));
-        return { exitMode: false };
+        return {
+            exitMode: false,
+            output: (0, theme_1.danger)(`Could not parse git command. Type "help" for available commands.`),
+        };
     }
     // Route the resolved intent to the appropriate operation
-    const result = await (0, spinner_1.withSpinner)("Running git operation...", () => executeGitIntent(orchestrator, reader, intent));
-    if (typeof result === "string") {
-        console.log((0, theme_1.panel)("Git", [result]));
-    }
-    else {
-        console.log((0, theme_1.panel)("Git", result));
-    }
-    return { exitMode: false };
+    const result = await executeGitIntent(orchestrator, reader, intent);
+    return {
+        exitMode: false,
+        output: (0, theme_1.panel)("Git", typeof result === "string" ? [result] : result),
+    };
 }
 async function executeGitIntent(orchestrator, reader, intent) {
     switch (intent.command) {
@@ -750,26 +842,26 @@ async function executeGitIntent(orchestrator, reader, intent) {
 async function handleSecurityInput(orchestrator, reader, input) {
     const normalized = input.toLowerCase().trim();
     if (normalized === "exit" || normalized === "quit") {
-        console.log((0, theme_1.accent)("Leaving Security mode."));
-        return { exitMode: true };
+        return { exitMode: true, output: (0, theme_1.accent)("Leaving Security mode.") };
     }
     if (normalized === "help") {
-        console.log((0, theme_1.panel)("Security Help", orchestrator.getSecurityHelp()));
-        return { exitMode: false };
+        return {
+            exitMode: false,
+            output: (0, theme_1.panel)("Security Help", orchestrator.getSecurityHelp()),
+        };
     }
     const intent = await (0, spinner_1.withSpinner)("Analyzing intent...", () => orchestrator.parseSecurityNaturalLanguage(input));
     if (intent.command === "unknown") {
-        console.log((0, theme_1.danger)(`Could not parse security command. Type "help" for available commands.`));
-        return { exitMode: false };
+        return {
+            exitMode: false,
+            output: (0, theme_1.danger)(`Could not parse security command. Type "help" for available commands.`),
+        };
     }
-    const result = await (0, spinner_1.withSpinner)("Analyzing security...", () => executeSecurityIntent(orchestrator, reader, intent));
-    if (typeof result === "string") {
-        console.log((0, theme_1.panel)("Security", [result]));
-    }
-    else {
-        console.log((0, theme_1.panel)("Security", result));
-    }
-    return { exitMode: false };
+    const result = await executeSecurityIntent(orchestrator, reader, intent);
+    return {
+        exitMode: false,
+        output: (0, theme_1.panel)("Security", typeof result === "string" ? [result] : result),
+    };
 }
 async function executeSecurityIntent(orchestrator, _reader, intent) {
     switch (intent.command) {
