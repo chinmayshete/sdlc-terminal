@@ -12,6 +12,10 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+if (process.env.SDLC_SKIP_SSL_VERIFY === "true") {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+}
+
 function readEnv(name: string): string | undefined {
   const value = process.env[name]?.trim();
   if (!value) {
@@ -35,6 +39,13 @@ export const env = {
   vaultAddr: readEnv("VAULT_ADDR") ?? "http://127.0.0.1:8200",
   vaultToken: readEnv("VAULT_TOKEN"),
   vaultSecretPath: readEnv("VAULT_SECRET_PATH") ?? "secret/data/sdlc",
+
+  // Jira Integration
+  jiraHost: readEnv("JIRA_HOST"),
+  jiraEmail: readEnv("JIRA_EMAIL"),
+  jiraApiToken: readEnv("JIRA_API_TOKEN"),
+  jiraProjectKey: readEnv("JIRA_PROJECT_KEY") ?? "SDLC",
+  skipSslVerify: readEnv("SDLC_SKIP_SSL_VERIFY") === "true",
 };
 
 export function hasAzureOpenAiConfig(): boolean {

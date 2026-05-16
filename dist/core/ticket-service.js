@@ -1,35 +1,24 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TicketService = void 0;
-const fs_1 = require("fs");
-const path_1 = __importDefault(require("path"));
-const paths_1 = require("../config/paths");
+const jira_service_1 = require("./jira-service");
 class TicketService {
+    constructor() {
+        this.jira = new jira_service_1.JiraService();
+    }
     async listTickets() {
-        const files = await fs_1.promises.readdir(paths_1.paths.ticketsDir);
-        const tickets = [];
-        for (const file of files.filter((entry) => entry.endsWith(".json"))) {
-            const ticket = await this.readTicket(path_1.default.basename(file, ".json"));
-            tickets.push(ticket);
-        }
-        return tickets;
+        return this.jira.fetchTickets();
     }
     async readTicket(ticketId) {
-        const filePath = path_1.default.join(paths_1.paths.ticketsDir, `${ticketId}.json`);
-        const raw = await fs_1.promises.readFile(filePath, "utf8");
-        return JSON.parse(raw);
+        const ticket = await this.jira.fetchTicket(ticketId);
+        if (!ticket) {
+            throw new Error(`Ticket not found in Jira: ${ticketId}`);
+        }
+        return ticket;
     }
     async ticketExists(ticketId) {
-        try {
-            await fs_1.promises.access(path_1.default.join(paths_1.paths.ticketsDir, `${ticketId}.json`));
-            return true;
-        }
-        catch {
-            return false;
-        }
+        const ticket = await this.jira.fetchTicket(ticketId);
+        return Boolean(ticket);
     }
 }
 exports.TicketService = TicketService;
