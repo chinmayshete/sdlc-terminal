@@ -1,6 +1,0 @@
-{
-  "id": "USER-202",
-  "title": "Add user listing endpoint",
-  "description": "Create an endpoint to list all registered users without passwords",
-  "priority": "MEDIUM"
-}

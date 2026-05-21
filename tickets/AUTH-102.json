@@ -1,6 +1,0 @@
-{
-  "id": "AUTH-102",
-  "title": "Add register endpoint",
-  "description": "Create a registration API using name, email, and password",
-  "priority": "HIGH"
-}

@@ -45,12 +45,43 @@ The "Autonomous Engineer" mode.
 
 ---
 
-## 🛠️ Technical Implementation
+## 🛠️ Technical Implementation & Architecture
+
+Nexus uses a hybrid architecture, decoupling the core AI engine from the user interfaces.
+
+### Dual-Interface Architecture
+
+```mermaid
+graph TB
+    subgraph "Interfaces"
+        A["VS Code Extension\n(TypeScript / Webview)"]
+        B["Terminal REPL\n(Python / Rich)"]
+    end
+    subgraph "Bridge"
+        C["FastAPI Server\nhttp://localhost:9500"]
+    end
+    subgraph "Core Engine (Python)"
+        D["Orchestrator"]
+        E["NL Parsers (Intent, NLP, Security)"]
+        F["Operational Services\n(Git, Jira, Scanner, State)"]
+    end
+    
+    A -->|HTTP/JSON & WebSockets| C
+    B -->|Direct Import| D
+    C -->|Direct Import| D
+    D --> E
+    D --> F
+```
+
+- **Core Engine (Python)**: Contains the `Orchestrator`, which manages state, routes commands, and interacts with LLMs.
+- **Terminal REPL**: A native CLI interface built with `prompt_toolkit` and `rich`, running in the same process as the core engine.
+- **VS Code Extension**: A TypeScript-based extension featuring a premium dark-themed webview for rich chat interactions. It communicates with the core engine via a FastAPI bridge server.
+- **FastAPI Bridge**: A lightweight REST and WebSocket server that wraps the Core Engine, allowing external clients (like the VS Code extension) to interact with Nexus.
 
 ### Hybrid Intent Parsing
 Nexus uses a dual-layer parsing strategy for maximum speed and intelligence:
-1.  **Regex Layer**: Instantly recognizes 80+ standard commands for zero latency.
-2.  **AI Fallback**: If no regex matches, the request is sent to a specialized "Intent Parser" (GPT-4o) which resolves the natural language into a structured JSON command.
+1.  **Regex Layer**: Instantly recognizes standard commands for zero latency.
+2.  **AI Fallback**: If no regex matches, the request is sent to a specialized "Intent Parser" which resolves the natural language into a structured JSON command.
 
 ### Agentic Workflow Architecture
 When performing complex tasks (like `execute <ticket>`), Nexus coordinates three distinct AI agents:
@@ -166,13 +197,17 @@ nexus terminal
 
 ## 🏗️ Technology Stack
 
-- **Runtime**: Node.js
-- **Language**: TypeScript
-- **CLI Framework**: Commander.js
+**Core & Terminal:**
+- **Runtime**: Python 3.10+
+- **CLI/Styling**: Rich, Prompt Toolkit, Click
+- **API Server**: FastAPI, Uvicorn, Pydantic
 - **AI Platform**: Azure OpenAI (GPT-4o)
-- **Version Control**: simple-git
-- **Environment**: Dotenv
-- **Styling**: Chalk, custom Panel/Spinner utilities
+- **Version Control**: GitPython
+
+**VS Code Extension:**
+- **Language**: TypeScript
+- **Framework**: VS Code Extension API, Webviews
+- **Bundler**: Webpack
 
 ---
 *Created by the Google Deepmind team for Advanced Agentic Coding.*

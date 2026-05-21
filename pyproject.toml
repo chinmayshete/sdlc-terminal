@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nexus-cli"
+version = "0.1.0"
+description = "Nexus: AI-powered SDLC terminal assistant"
+requires-python = ">=3.10"
+dependencies = [
+    "rich>=14.0.0",
+    "python-dotenv>=1.1.0",
+    "httpx>=0.28.0",
+    "pydantic>=2.11.0",
+    "pydantic-settings>=2.9.0",
+    "prompt_toolkit>=3.0.0",
+    "gitpython>=3.1.0",
+    "click>=8.0.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
+]
+
+[project.scripts]
+nexus = "src.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]

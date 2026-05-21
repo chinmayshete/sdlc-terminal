@@ -1,6 +1,0 @@
-{
-  "id": "AUTH-103",
-  "title": "Add logout endpoint",
-  "description": "Create a logout API that returns a success response for the current session",
-  "priority": "MEDIUM"
-}
