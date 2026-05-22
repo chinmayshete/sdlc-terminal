@@ -101,6 +101,11 @@ export class NexusClient {
     this.baseUrl = config.get<string>('serverUrl', 'http://127.0.0.1:9500');
   }
 
+  /** Get the current base URL. */
+  public getBaseUrl(): string {
+    return this.baseUrl;
+  }
+
   // ── Health & Status ─────────────────────────────────────
 
   /** Check if the server is reachable. */

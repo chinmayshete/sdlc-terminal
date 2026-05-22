@@ -11,9 +11,14 @@ from typing import TypeVar, Callable, Awaitable
 T = TypeVar("T")
 
 # Force UTF-8 stdout on Windows to prevent cp1252 charmap errors
-if sys.platform == "win32" and hasattr(sys.stdout, "buffer"):
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, io.UnsupportedOperation):
+        if hasattr(sys.stdout, "buffer"):
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 nexus_theme = Theme({"accent":"bold green","warning":"bold yellow","danger":"bold red",
     "success":"bold green","info":"bold cyan","subtle":"dim","primary":"bold dodger_blue2","secondary":"bold medium_purple1"})

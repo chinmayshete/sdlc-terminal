@@ -52,6 +52,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             type: 'init',
             mode: this.currentMode,
             serverRunning: this.serverManager.isRunning,
+            serverUrl: this.client.getBaseUrl(),
           });
           break;
         }
@@ -166,7 +167,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; font-src ${webview.cspSource} https://fonts.gstatic.com; connect-src ${webview.cspSource};">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; font-src ${webview.cspSource} https://fonts.gstatic.com; connect-src ${webview.cspSource} ws://127.0.0.1:* ws://localhost:* wss://127.0.0.1:* wss://localhost:* http://127.0.0.1:* http://localhost:* https://127.0.0.1:* https://localhost:*; ">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="${styleUri}">
   <title>Nexus SDLC</title>
@@ -201,13 +202,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     </div>
   </div>
 
-  <!-- Quick Actions -->
-  <div class="quick-actions" id="quick-actions">
-    <button class="quick-btn" data-command="status" title="Workspace Status">📊 Status</button>
-    <button class="quick-btn" data-command="health" title="System Health">🏥 Health</button>
-    <button class="quick-btn" data-command="scan" title="Security Scan">🛡️ Scan</button>
-    <button class="quick-btn" data-command="tickets" title="Show Tickets">🎫 Tickets</button>
-  </div>
 
   <!-- Chat Messages -->
   <div class="chat-container" id="chat-container">

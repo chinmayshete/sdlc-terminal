@@ -1,10 +1,12 @@
 """Interactive Terminal — Rich + prompt_toolkit REPL with 5 specialized modes and complete command matrix."""
 from __future__ import annotations
 import asyncio
+import json
 from dataclasses import dataclass, field
 from prompt_toolkit import PromptSession
 from prompt_toolkit.formatted_text import HTML
 from ..core.orchestrator import Orchestrator
+from ..core.agent_loop import AgentLoop
 from ..core.types import NlpChatTurn, FileSnapshot
 from ..utils.theme import console, render_banner, print_panel, with_spinner
 from ..utils.nexus_nl_parser import parse_nexus_intent_with_llm
@@ -22,6 +24,7 @@ from ..utils import system_operations as sysops
 class NlpState:
     history: list[NlpChatTurn] = field(default_factory=list)
     snapshots: list[list[FileSnapshot]] = field(default_factory=list)
+    agent: AgentLoop | None = None
 
 PROMPTS = {
     "command": HTML("<ansigreen><b>nexus &gt; </b></ansigreen>"),
@@ -46,7 +49,7 @@ async def run_terminal(orchestrator: Orchestrator):
         "[bold dim]Type 'help' in any mode for detailed commands, or 'exit' to quit.[/]"
     ])
     session: PromptSession = PromptSession()
-    mode, nlp = "command", NlpState()
+    mode, nlp = "command", NlpState(agent=AgentLoop())
 
     while True:
         try:
@@ -95,6 +98,109 @@ async def run_terminal(orchestrator: Orchestrator):
 
         except Exception as e:
             console.print(f"[bold red]Error: {e}[/]")
+
+async def run_agent_loop_turn(agent: AgentLoop, raw: str, session: PromptSession) -> dict:
+    res = await with_spinner("Thinking...", lambda: agent.start_turn(raw))
+    
+    while True:
+        res_type = res.get("type")
+        if res_type == "permission_request":
+            if res.get("thought"):
+                console.print(f"\n[bold green]Thought:[/] {res['thought']}")
+            
+            tool = res["tool"]
+            args = res["args"]
+            message = res.get("message")
+            if message:
+                console.print(f"[bold green]Message:[/] {message}")
+                
+            console.print(f"\n[bold red]🔑 Permission Required[/]")
+            if tool == "run_command":
+                cmd = args.get("cmd", "")
+                console.print(f"Wants to run shell command:")
+                console.print(f"  [bold yellow]> {cmd}[/]")
+            elif tool == "edit_file":
+                path = args.get("path", "")
+                action = args.get("action", "update")
+                content = args.get("content", "")
+                console.print(f"Wants to [bold yellow]{action}[/] file: [bold cyan]{path}[/]")
+                if content:
+                    console.print("[dim]─── Proposed Content ───[/]")
+                    console.print(content)
+                    console.print("[dim]─────────────────────────[/]")
+            elif tool == "create_plan":
+                markdown = args.get("markdown", "")
+                console.print(f"Wants to propose implementation plan:")
+                console.print("[dim]─── Proposed Plan ───[/]")
+                console.print(markdown)
+                console.print("[dim]─────────────────────[/]")
+            else:
+                console.print(f"Wants to run tool: [bold cyan]{tool}[/]")
+                console.print(f"Arguments: {json.dumps(args, indent=2)}")
+            
+            confirm = await asyncio.get_event_loop().run_in_executor(
+                None, 
+                lambda: session.prompt(HTML("<ansiyellow><b>Allow execution? (y/n): </b></ansiyellow>"))
+            )
+            allowed = confirm.strip().lower() in ("y", "yes")
+            
+            if allowed:
+                console.print("[bold green]Executing tool...[/]")
+                res = await with_spinner("Executing...", lambda: agent.resume_with_permission(True))
+            else:
+                console.print("[bold yellow]Permission denied.[/]")
+                res = await with_spinner("Thinking...", lambda: agent.resume_with_permission(False))
+                
+        elif res_type == "clarification":
+            if res.get("thought"):
+                console.print(f"\n[bold green]Thought:[/] {res['thought']}")
+            
+            question = res.get("question")
+            return {
+                "title": "Nexus AI (Clarification)",
+                "output": [question]
+            }
+            
+        elif res_type == "response":
+            if res.get("thought"):
+                console.print(f"\n[bold green]Thought:[/] {res['thought']}")
+                
+            message = res.get("message")
+            changes_made = []
+            for i in range(len(agent.history)):
+                turn = agent.history[i]
+                if turn.get("role") == "assistant":
+                    try:
+                        content_data = json.loads(turn.get("content", "{}"))
+                        if content_data.get("tool") == "edit_file":
+                            if i + 1 < len(agent.history):
+                                res_turn = agent.history[i + 1]
+                                if "Tool execution result for 'edit_file'" in res_turn.get("content", ""):
+                                    args = content_data.get("args", {})
+                                    changes_made.append(f"  • {args.get('path')} ({args.get('action', 'update')})")
+                    except Exception:
+                        pass
+            
+            output_lines = [message]
+            if changes_made:
+                output_lines.append("\n[bold green]Updated files:[/]")
+                output_lines.extend(changes_made)
+                
+            return {
+                "title": "Nexus AI",
+                "output": output_lines
+            }
+            
+        elif res_type == "error":
+            return {
+                "title": "Nexus Error",
+                "output": [f"[bold red]Error:[/] {res.get('message')}"]
+            }
+        else:
+            return {
+                "title": "Nexus AI",
+                "output": [str(res)]
+            }
 
 # ── Command Mode ─────────────────────────────────────────────
 async def _handle_command(o: Orchestrator, raw: str, session: PromptSession, nlp: NlpState):
@@ -174,25 +280,11 @@ async def _handle_command(o: Orchestrator, raw: str, session: PromptSession, nlp
             if not nlp.snapshots: return {"title": "Undo", "output": ["Nothing to undo."]}, None, False
             await o.undo_nlp_changes(nlp.snapshots.pop()); return {"title": "Undo", "output": ["Reverted last AI change."]}, None, False
         
-        r = await with_spinner("Thinking...", lambda: o.run_free_nlp_chat(nlp.history, raw))
-        nlp.history.extend([NlpChatTurn("user", raw), NlpChatTurn("assistant", r.message)])
-        
-        output_lines = [r.message]
-        if r.changes:
-            snaps = await o.apply_nlp_changes(r.changes)
-            nlp.snapshots.append(snaps)
-            output_lines.append(f"[bold green]Updated files:[/]\n" + "\n".join(f"  • {c.path} ({getattr(c, 'action', 'update')})" for c in r.changes))
-            output_lines.append('Use "show diff" or "undo last change".')
+        if not nlp.agent:
+            nlp.agent = AgentLoop()
             
-        if r.commands:
-            for cmd in r.commands:
-                output_lines.append(f"\n[bold yellow]▶ Executing command:[/] {cmd}")
-                res = await execute_command_string(o, cmd, session, nlp)
-                if res and "output" in res:
-                    output_lines.append(f"[bold cyan]── {res.get('title', 'Output')} ──[/]")
-                    output_lines.extend(res["output"])
-                    
-        return {"title": "Nexus AI", "output": output_lines}, None, False
+        res = await run_agent_loop_turn(nlp.agent, raw, session)
+        return res, None, False
 
 async def execute_command_string(o: Orchestrator, cmd_str: str, session: PromptSession, nlp: NlpState) -> dict | None:
     intent = await parse_nexus_intent_with_llm(cmd_str)

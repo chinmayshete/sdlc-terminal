@@ -293,39 +293,127 @@ async def system_version():
 @app.websocket("/ws/chat")
 async def websocket_chat(websocket: WebSocket):
     await websocket.accept()
-    o = _get_orchestrator()
-    ws_history: list[NlpChatTurn] = []
+    from ..core.agent_loop import AgentLoop
+    agent = AgentLoop()
+
+    async def handle_agent_result(res: dict):
+        res_type = res.get("type")
+        if res_type == "permission_request":
+            await websocket.send_json({
+                "type": "permission_request",
+                "id": res["request_id"],
+                "tool": res["tool"],
+                "args": res["args"],
+                "thought": res.get("thought", ""),
+                "message": res.get("message", "")
+            })
+        elif res_type == "clarification":
+            await websocket.send_json({
+                "type": "clarification",
+                "thought": res.get("thought", ""),
+                "question": res["question"]
+            })
+        elif res_type == "response":
+            # Collect file changes made during this turn
+            changes = []
+            for i in range(len(agent.history)):
+                turn = agent.history[i]
+                if turn.get("role") == "assistant":
+                    try:
+                        content_data = json.loads(turn.get("content", "{}"))
+                        if content_data.get("tool") == "edit_file":
+                            if i + 1 < len(agent.history):
+                                res_turn = agent.history[i + 1]
+                                if "Tool execution result for 'edit_file'" in res_turn.get("content", ""):
+                                    args = content_data.get("args", {})
+                                    changes.append({
+                                        "path": args.get("path"),
+                                        "content": args.get("content", ""),
+                                        "action": args.get("action", "update")
+                                    })
+                    except Exception:
+                        pass
+
+            await websocket.send_json({
+                "type": "response",
+                "message": res["message"],
+                "changes": changes
+            })
+        elif res_type == "error":
+            await websocket.send_json({
+                "type": "error",
+                "message": res["message"]
+            })
+
+    active_task: asyncio.Task | None = None
+
+    async def run_agent_turn(coro):
+        nonlocal active_task
+        try:
+            res = await coro
+            await handle_agent_result(res)
+        except asyncio.CancelledError:
+            agent.pending_tool = None
+            agent.pending_tool_id = None
+            try:
+                await websocket.send_json({
+                    "type": "error",
+                    "message": "Execution stopped by user."
+                })
+            except Exception:
+                pass
+        except Exception as e:
+            try:
+                await websocket.send_json({
+                    "type": "error",
+                    "message": f"Execution failed: {str(e)}"
+                })
+            except Exception:
+                pass
+        finally:
+            active_task = None
 
     try:
+        import json
         while True:
             data = await websocket.receive_json()
-            message = data.get("message", "")
-            if not message:
-                await websocket.send_json({"type": "error", "message": "Empty message"})
-                continue
+            msg_type = data.get("type", "chat")
 
-            await websocket.send_json({"type": "thinking", "message": "Processing..."})
+            if msg_type == "chat":
+                if active_task and not active_task.done():
+                    await websocket.send_json({"type": "error", "message": "An execution is already in progress."})
+                    continue
+                message = data.get("message", "")
+                if not message:
+                    await websocket.send_json({"type": "error", "message": "Empty message"})
+                    continue
 
-            try:
-                result = await o.run_free_nlp_chat(ws_history, message)
-                ws_history.append(NlpChatTurn("user", message))
-                ws_history.append(NlpChatTurn("assistant", result.message))
+                await websocket.send_json({"type": "thinking", "message": "Thinking..."})
+                active_task = asyncio.create_task(run_agent_turn(agent.start_turn(message)))
 
-                changes = []
-                if result.changes:
-                    await o.apply_nlp_changes(result.changes)
-                    changes = [{"path": c.path, "content": c.content, "action": getattr(c, "action", "update")} for c in result.changes]
+            elif msg_type == "permission_response":
+                if active_task and not active_task.done():
+                    await websocket.send_json({"type": "error", "message": "An execution is already in progress."})
+                    continue
+                allowed = data.get("allowed", False)
+                req_id = data.get("id")
 
-                await websocket.send_json({
-                    "type": "response",
-                    "message": result.message,
-                    "changes": changes,
-                    "commands": result.commands if result.commands else [],
-                })
-            except Exception as e:
-                await websocket.send_json({"type": "error", "message": str(e)})
+                if not agent.pending_tool or agent.pending_tool_id != req_id:
+                    await websocket.send_json({"type": "error", "message": "No matching pending tool request."})
+                    continue
+
+                await websocket.send_json({"type": "thinking", "message": "Executing..."})
+                active_task = asyncio.create_task(run_agent_turn(agent.resume_with_permission(allowed)))
+
+            elif msg_type == "stop":
+                if active_task and not active_task.done():
+                    active_task.cancel()
+                else:
+                    await websocket.send_json({"type": "error", "message": "No execution in progress."})
+
     except WebSocketDisconnect:
-        pass
+        if active_task and not active_task.done():
+            active_task.cancel()
 
 
 # ── Mode-specific command executors (mirrors terminal.py logic) ──

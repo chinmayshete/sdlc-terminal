@@ -12,7 +12,6 @@
   const sendBtn = document.getElementById('send-btn');
   const modeIndicator = document.getElementById('mode-indicator');
   const serverStatus = document.getElementById('server-status');
-  const quickActions = document.getElementById('quick-actions');
 
   let currentMode = 'command';
   let isProcessing = false;
@@ -64,16 +63,6 @@
     });
   });
 
-  // ── Quick Actions ───────────────────────────────────────
-  document.querySelectorAll('.quick-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const command = btn.getAttribute('data-command');
-      if (command) {
-        vscode.postMessage({ type: 'command', input: command, mode: currentMode });
-        addUserMessage(command);
-      }
-    });
-  });
 
   // ── Hints ───────────────────────────────────────────────
   document.querySelectorAll('.hint').forEach((hint) => {
@@ -85,6 +74,92 @@
       }
     });
   });
+
+  // ── Send Message ────────────────────────────────────────
+  // ── WebSocket Connection State ───────────────────────────
+  let ws = null;
+  let wsUrl = '';
+  let reconnectTimer = null;
+  let serverUrl = 'http://127.0.0.1:9500';
+
+  function initWebSocket(baseUrl) {
+    serverUrl = baseUrl;
+    // Replace http:// or https:// with ws:// or wss://
+    wsUrl = baseUrl.replace(/^http/, 'ws') + '/ws/chat';
+    connectWebSocket();
+  }
+
+  function connectWebSocket() {
+    if (ws) {
+      try { ws.close(); } catch (e) {}
+    }
+
+    console.log('Connecting to WebSocket:', wsUrl);
+    ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+      console.log('WebSocket connected');
+      updateServerStatus(true);
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        handleServerMessage(data);
+      } catch (err) {
+        console.error('Error parsing WebSocket message:', err);
+      }
+    };
+
+    ws.onclose = () => {
+      console.log('WebSocket connection closed');
+      updateServerStatus(false);
+      // Auto-reconnect if server status is presumably online
+      if (!reconnectTimer) {
+        reconnectTimer = setTimeout(() => {
+          reconnectTimer = null;
+          connectWebSocket();
+        }, 3000);
+      }
+    };
+
+    ws.onerror = (err) => {
+      console.error('WebSocket error:', err);
+      updateServerStatus(false);
+    };
+  }
+
+  function handleServerMessage(data) {
+    switch (data.type) {
+      case 'thinking':
+        addThinking();
+        break;
+
+      case 'thought':
+        addThoughtBlock(data.message);
+        break;
+
+      case 'response':
+        addAssistantMessage(data.message, data.changes, false);
+        break;
+
+      case 'clarification':
+        addClarificationQuestion(data.question);
+        break;
+
+      case 'permission_request':
+        addPermissionRequest(data.id, data.tool, data.args, data.thought, data.message);
+        break;
+
+      case 'error':
+        addAssistantMessage(data.message, null, true);
+        break;
+    }
+  }
 
   // ── Send Message ────────────────────────────────────────
   function sendMessage() {
@@ -99,7 +174,11 @@
     chatInput.value = '';
     chatInput.style.height = 'auto';
 
-    vscode.postMessage({ type: 'chat', message, mode: currentMode });
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'chat', message }));
+    } else {
+      addAssistantMessage('✗ Not connected to Nexus Agent server. Please start the server and try again.', null, true);
+    }
   }
 
   // ── Mode Switching ──────────────────────────────────────
@@ -158,6 +237,92 @@
     scrollToBottom();
   }
 
+  function addThoughtBlock(thought) {
+    if (!thought) return;
+    const div = document.createElement('div');
+    div.className = 'thought-block';
+    div.innerHTML = `💡 <em>Thought:</em> ${formatRichText(thought)}`;
+    chatContainer.appendChild(div);
+    scrollToBottom();
+  }
+
+  function addClarificationQuestion(question) {
+    removeThinking();
+    isProcessing = false;
+
+    const div = document.createElement('div');
+    div.className = 'message message-assistant';
+    div.innerHTML = `
+      <span class="message-label" style="color: var(--devops-yellow)">Nexus (Clarification)</span>
+      <div class="message-bubble" style="border-color: var(--devops-yellow); background: rgba(255, 204, 0, 0.03);">${formatRichText(question)}</div>
+    `;
+    chatContainer.appendChild(div);
+    scrollToBottom();
+    chatInput.focus();
+  }
+
+  function addPermissionRequest(id, tool, args, thought, message) {
+    removeThinking();
+    isProcessing = true;
+    chatInput.disabled = true;
+    chatInput.classList.add('chat-input-disabled');
+    sendBtn.disabled = true;
+
+    const div = document.createElement('div');
+    div.className = 'permission-box';
+
+    let argsStr = '';
+    if (tool === 'run_command') {
+      argsStr = args.cmd || '';
+    } else {
+      argsStr = JSON.stringify(args, null, 2);
+    }
+
+    div.innerHTML = `
+      <div class="permission-header">🔑 Permission Required</div>
+      <div class="permission-body">
+        ${thought ? `<p class="permission-thought">Thought: "${formatRichText(thought)}"</p>` : ''}
+        ${message ? `<p>${formatRichText(message)}</p>` : ''}
+        <p>Wants to execute <strong>${escapeHtml(tool)}</strong>:</p>
+        <pre><code>${escapeHtml(argsStr)}</code></pre>
+      </div>
+      <div class="permission-actions">
+        <button class="action-btn deny-btn" id="deny-${id}">Deny</button>
+        <button class="action-btn allow-btn" id="allow-${id}">Allow</button>
+      </div>
+    `;
+    chatContainer.appendChild(div);
+    scrollToBottom();
+
+    const allowBtn = div.querySelector(`#allow-${id}`);
+    const denyBtn = div.querySelector(`#deny-${id}`);
+
+    const handleResponse = (allowed) => {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'permission_response',
+          id: id,
+          allowed: allowed
+        }));
+      }
+
+      div.querySelector('.permission-actions').innerHTML = `
+        <span class="mode-indicator" style="background: ${allowed ? 'rgba(0,255,136,0.1)' : 'rgba(255,68,68,0.1)'}; color: ${allowed ? 'var(--nexus-green)' : '#ff6666'};">
+          ${allowed ? '✓ Allowed' : '✗ Denied'}
+        </span>
+      `;
+
+      chatInput.disabled = false;
+      chatInput.classList.remove('chat-input-disabled');
+      sendBtn.disabled = false;
+      isProcessing = false;
+      chatInput.focus();
+    };
+
+    allowBtn.addEventListener('click', () => handleResponse(true));
+    denyBtn.addEventListener('click', () => handleResponse(false));
+  }
+
   function addOutputPanel(title, output) {
     removeThinking();
 
@@ -179,6 +344,8 @@
 
   function addThinking() {
     isProcessing = true;
+    // Prevent duplicate thinking indicators
+    if (document.getElementById('thinking-indicator')) return;
     const div = document.createElement('div');
     div.className = 'thinking';
     div.id = 'thinking-indicator';
@@ -187,9 +354,27 @@
         <span></span><span></span><span></span>
       </div>
       <span>Nexus is thinking...</span>
+      <button id="stop-btn" class="stop-btn" title="Stop execution">
+        <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
+          <rect x="2" y="2" width="12" height="12" rx="1.5" />
+        </svg>
+        <span>Stop</span>
+      </button>
     `;
     chatContainer.appendChild(div);
     scrollToBottom();
+
+    const stopBtn = div.querySelector('#stop-btn');
+    if (stopBtn) {
+      stopBtn.addEventListener('click', () => {
+        stopBtn.disabled = true;
+        const textSpan = stopBtn.querySelector('span');
+        if (textSpan) textSpan.textContent = 'Stopping...';
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'stop' }));
+        }
+      });
+    }
   }
 
   function removeThinking() {
@@ -207,14 +392,13 @@
       case 'init':
         switchMode(data.mode || 'command');
         updateServerStatus(data.serverRunning);
+        if (data.serverUrl) {
+          initWebSocket(data.serverUrl);
+        }
         break;
 
       case 'thinking':
         addThinking();
-        break;
-
-      case 'chatResponse':
-        addAssistantMessage(data.message, data.changes, data.isError);
         break;
 
       case 'commandResult':
@@ -227,6 +411,11 @@
 
       case 'serverStatus':
         updateServerStatus(data.running);
+        if (data.running && ws && ws.readyState !== WebSocket.OPEN && ws.readyState !== WebSocket.CONNECTING) {
+          connectWebSocket();
+        } else if (!data.running && ws) {
+          try { ws.close(); } catch (e) {}
+        }
         break;
     }
   });
@@ -251,6 +440,7 @@
   }
 
   function escapeHtml(text) {
+    if (typeof text !== 'string') return '';
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;

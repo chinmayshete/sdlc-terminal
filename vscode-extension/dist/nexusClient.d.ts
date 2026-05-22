@@ -69,6 +69,8 @@ export declare class NexusClient {
     constructor();
     /** Update the base URL from settings. */
     refreshConfig(): void;
+    /** Get the current base URL. */
+    getBaseUrl(): string;
     /** Check if the server is reachable. */
     ping(): Promise<boolean>;
     /** Get workspace status (tickets, AI config). */
