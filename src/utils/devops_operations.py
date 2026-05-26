@@ -4,7 +4,7 @@ from __future__ import annotations
 import json, subprocess, re
 from pathlib import Path
 from ..config.paths import paths
-from ..config.env import env, has_azure_openai_config
+from ..config.env import env, has_llm_config
 from ..utils.cicd import get_pipeline_info, validate_jenkinsfile, format_pipeline_info
 from ..utils.code_scanner import run_code_scan, format_scan_report, run_incremental_scan
 from ..utils.llm import check_ai_health
@@ -105,9 +105,10 @@ async def validate_dockerfile() -> list[str]:
     df = paths["root_dir"] / "Dockerfile"
     if not df.exists(): return ["[bold yellow]⚠ No Dockerfile found.[/]"]
     content = df.read_text(encoding="utf-8", errors="ignore")
+    user_ok = bool(re.search(r'^USER\s+(?!root)', content, re.M))
     return ["[bold cyan]Dockerfile Best-Practice Validation[/]:", "",
         f"  {'[bold green]✓[/]' if 'HEALTHCHECK' in content else '[bold red]✗[/]'} [bold white]Container Healthcheck Directive[/]",
-        f"  {'[bold green]✓[/]' if re.search(r'^USER\\s+(?!root)', content, re.M) else '[bold red]✗[/]'} [bold white]Non-root Execution User Enforcement[/]",
+        f"  {'[bold green]✓[/]' if user_ok else '[bold red]✗[/]'} [bold white]Non-root Execution User Enforcement[/]",
         f"  {'[bold green]✓[/]' if 'AS ' in content else '[bold yellow]⚠[/]'} [bold white]Multi-stage Build Isolation[/]",
         f"  {'[bold green]✓[/]' if 'ADD ' not in content else '[bold yellow]⚠[/]'} [bold white]Strict COPY Directive (No ADD)[/]"]
 
@@ -204,7 +205,7 @@ async def get_deployment_status() -> list[str]:
     return ["[bold cyan]Deployment Target Posture Status[/]:", "",
         f"  • [bold white]Active Branch[/]: [bold magenta]{branch}[/]",
         f"  • [bold white]Uncommitted Files[/]: [[yellow if changed else 'green']{len(changed)}[/]]",
-        f"  • [bold white]AI Service Connected[/]: [[green if has_azure_openai_config() else 'red']{has_azure_openai_config()}[/]]",
+        f"  • [bold white]AI Service Connected[/]: [[green if has_llm_config() else 'red']{has_llm_config()}[/]]",
         f"  • [bold white]Mock Fallback Enabled[/]: [yellow]{env.use_mock}[/]"]
 
 async def pre_deploy_check(target_env: str) -> list[str]:

@@ -204,9 +204,10 @@ async def check_docker_security() -> list[str]:
     df = paths["root_dir"] / "Dockerfile"
     if not df.exists(): return ["[bold yellow]⚠ No Dockerfile found in repository.[/]"]
     content = df.read_text(encoding="utf-8", errors="ignore")
-    return ["[bold cyan]Dockerfile Security Assessment[/]:", "",
+    user_ok = bool(re.search(r'^USER\s+(?!root)', content, re.M))
+    return ["[bold cyan]Dockerfile Best-Practice Validation[/]:", "",
         f"  {'[bold green]✓[/]' if 'HEALTHCHECK' in content else '[bold red]✗[/]'} [bold white]Container Healthcheck Directive[/]",
-        f"  {'[bold green]✓[/]' if re.search(r'^USER\\s+(?!root)', content, re.M) else '[bold red]✗[/]'} [bold white]Non-root Execution User Enforcement[/]",
+        f"  {'[bold green]✓[/]' if user_ok else '[bold red]✗[/]'} [bold white]Non-root Execution User Enforcement[/]",
         f"  {'[bold green]✓[/]' if 'AS ' in content else '[bold yellow]⚠[/]'} [bold white]Multi-stage Build Isolation[/]",
         f"  {'[bold green]✓[/]' if 'ADD ' not in content else '[bold yellow]⚠[/]'} [bold white]Strict COPY Directive (No ADD)[/]"]
 

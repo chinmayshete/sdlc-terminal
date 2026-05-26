@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Interactive Terminal — Rich + prompt_toolkit REPL with 5 specialized modes and complete command matrix."""
 from __future__ import annotations
 import asyncio
@@ -204,6 +205,807 @@ async def run_agent_loop_turn(agent: AgentLoop, raw: str, session: PromptSession
 
 # ── Command Mode ─────────────────────────────────────────────
 async def _handle_command(o: Orchestrator, raw: str, session: PromptSession, nlp: NlpState):
+    # Intercept personalization/configuration commands
+    parts = raw.strip().split()
+    if parts and parts[0].lower() in ("configure", "personalize", "config"):
+        # Handle 'configure set <key> <value>'
+        if len(parts) >= 4 and parts[1].lower() == "set":
+            key = parts[2].lower()
+            val = " ".join(parts[3:])
+            
+            # Map key names
+            mapped_key = None
+            if key in ("provider", "llm_provider"):
+                mapped_key = "LLM_PROVIDER"
+            elif key in ("gemini_api_key", "gemini_key", "gemini_api"):
+                mapped_key = "GEMINI_API_KEY"
+            elif key in ("gemini_model", "gemini_model_name"):
+                mapped_key = "GEMINI_MODEL"
+            elif key in ("anthropic_api_key", "anthropic_key", "anthropic_api"):
+                mapped_key = "ANTHROPIC_API_KEY"
+            elif key in ("anthropic_model", "anthropic_model_name"):
+                mapped_key = "ANTHROPIC_MODEL"
+            elif key in ("aws_access_key_id", "aws_access_key", "aws_key"):
+                mapped_key = "AWS_ACCESS_KEY_ID"
+            elif key in ("aws_secret_access_key", "aws_secret_key", "aws_secret"):
+                mapped_key = "AWS_SECRET_ACCESS_KEY"
+            elif key in ("aws_region", "region"):
+                mapped_key = "AWS_REGION"
+            elif key in ("bedrock_model_id", "bedrock_model"):
+                mapped_key = "BEDROCK_MODEL_ID"
+            elif key in ("nvidia_api_key", "nvidia_key", "nvidia_api"):
+                mapped_key = "NVIDIA_API_KEY"
+            elif key in ("nvidia_model", "nvidia_model_name"):
+                mapped_key = "NVIDIA_MODEL"
+            elif key in ("mistral_api_key", "mistral_key", "mistral_api"):
+                mapped_key = "MISTRAL_API_KEY"
+            elif key in ("mistral_model", "mistral_model_name"):
+                mapped_key = "MISTRAL_MODEL"
+            elif key in ("foundry_endpoint", "foundry_url", "foundry_endpoint_url"):
+                mapped_key = "FOUNDRY_ENDPOINT"
+            elif key in ("foundry_api_key", "foundry_key", "foundry_api"):
+                mapped_key = "FOUNDRY_API_KEY"
+            elif key in ("foundry_model", "foundry_model_name"):
+                mapped_key = "FOUNDRY_MODEL"
+            elif key in ("os_base_url", "os_url", "os_base"):
+                mapped_key = "OS_BASE_URL"
+            elif key in ("os_model", "os_model_name"):
+                mapped_key = "OS_MODEL"
+            elif key in ("os_api_key", "os_key"):
+                mapped_key = "OS_API_KEY"
+            elif key in ("azure_api_key", "api_key", "key"):
+                mapped_key = "AZURE_OPENAI_API_KEY"
+            elif key in ("azure_endpoint", "endpoint"):
+                mapped_key = "AZURE_OPENAI_ENDPOINT"
+            elif key in ("azure_deployment", "deployment"):
+                mapped_key = "AZURE_OPENAI_DEPLOYMENT"
+            elif key in ("azure_api_version", "api_version", "version"):
+                mapped_key = "AZURE_OPENAI_API_VERSION"
+            elif key in ("llm_api_key", "llm_key", "llm-key"):
+                mapped_key = "LLM_API_KEY"
+            elif key in ("llm_base_url", "llm_url", "llm-url", "llm_base"):
+                mapped_key = "LLM_BASE_URL"
+            elif key in ("llm_model", "llm-model", "model"):
+                mapped_key = "LLM_MODEL"
+            elif key in ("mock", "use_mock"):
+                mapped_key = "SDLC_USE_MOCK"
+                val = val.lower() if val.lower() in ("true", "false") else ("true" if val.lower() in ("y", "yes", "1") else "false")
+            elif key in ("jira_host", "jira-host", "jira_url"):
+                mapped_key = "JIRA_HOST"
+            elif key in ("jira_email", "jira-email", "email"):
+                mapped_key = "JIRA_EMAIL"
+            elif key in ("jira_token", "jira_api_token", "jira-token"):
+                mapped_key = "JIRA_API_TOKEN"
+            elif key in ("jira_project", "jira_project_key", "project"):
+                mapped_key = "JIRA_PROJECT_KEY"
+            elif key in ("confluence_space", "confluence_space_key", "space"):
+                mapped_key = "CONFLUENCE_SPACE_KEY"
+            elif key in ("ssl", "ssl_verify", "skip_ssl"):
+                mapped_key = "SDLC_SKIP_SSL_VERIFY"
+                val = "true" if val.lower() in ("false", "skip", "disable", "no", "0") else "false"
+                
+            if not mapped_key:
+                return {"title": "Configuration Error", "output": [
+                    f"[bold red]✗ Unknown configuration key '{key}'.[/]",
+                    "Use 'configure' for interactive menu, or see help for valid keys."
+                ]}, None, False
+                
+            from ..utils.system_operations import update_env_var
+            update_env_var(mapped_key, val)
+            
+            # Redact API keys/secrets/tokens/passwords in response for security
+            is_sensitive = any(s in mapped_key.lower() for s in ("key", "secret", "token", "password"))
+            display_val = "********" if is_sensitive else val
+            return {"title": "Configuration Updated", "output": [f"[bold green]✓ Updated configuration[/]: [cyan]{mapped_key}[/] set to [yellow]{display_val}[/]"]}, None, False
+            
+        # Handle 'configure show' or 'configure view' or 'configure list'
+        elif len(parts) >= 2 and parts[1].lower() in ("show", "view", "list"):
+            from ..utils.system_operations import run_config_view
+            cfg = await run_config_view()
+            return {"title": "Active Configuration", "output": cfg}, None, False
+            
+        # Handle 'configure' (interactive mode)
+        elif len(parts) == 1:
+            from ..config.env import env, get_active_provider
+            from ..utils.system_operations import update_env_var
+            while True:
+                provider = get_active_provider()
+                menu_lines = [
+                    f"Active LLM Provider: [bold green]{provider}[/]",
+                    "",
+                    "[bold cyan]── Select Provider to Configure ──[/]",
+                    "  [bold white]1. Gemini[/]",
+                    "  [bold white]2. Anthropic[/]",
+                    "  [bold white]3. AWS Bedrock[/]",
+                    "  [bold white]4. NVIDIA NIM[/]",
+                    "  [bold white]5. Mistral AI[/]",
+                    "  [bold white]6. Azure AI Foundry[/]",
+                    "  [bold white]7. Open Source (Ollama/vLLM)[/]",
+                    "  [bold white]8. Azure OpenAI[/]",
+                    "  [bold white]9. Generic (OpenAI-compatible)[/]",
+                    "",
+                    "[bold cyan]── System Settings ──[/]",
+                    f"  [bold white]10. Mock Mode[/]:  [yellow]{env.use_mock}[/]",
+                    f"  [bold white]11. SSL Verify[/]: [{'green' if not env.skip_ssl_verify else 'red'}]{'Enabled' if not env.skip_ssl_verify else 'Disabled'}[/]",
+                    "",
+                    "[bold dim]Select option (1-11), or type 'exit' / 'back' to return.[/]"
+                ]
+                print_panel("Nexus AI Configuration Menu", menu_lines)
+                
+                choice = await asyncio.get_event_loop().run_in_executor(
+                    None, 
+                    lambda: session.prompt(HTML("<ansiyellow><b>Enter selection: </b></ansiyellow>"))
+                )
+                choice = choice.strip().lower()
+                if choice in ("exit", "back", "quit", "q"):
+                    break
+                    
+                if choice == "1":  # Gemini
+                    while True:
+                        sub_lines = [
+                            "[bold cyan]── Gemini Settings ──[/]",
+                            f"  [bold white]1. API Key[/]:   [dim]{'********' if env.gemini_api_key else '(not set)'}[/]",
+                            f"  [bold white]2. Model[/]:     [dim]{env.gemini_model or '(not set)'}[/]",
+                            "",
+                            "  [bold white]3. Set as Active Provider[/]",
+                            "",
+                            "[bold dim]Select setting (1-3) or type 'back' to return.[/]"
+                        ]
+                        print_panel("Gemini Configuration", sub_lines)
+                        sub_choice = await asyncio.get_event_loop().run_in_executor(
+                            None, 
+                            lambda: session.prompt(HTML("<ansiyellow><b>Gemini selection: </b></ansiyellow>"))
+                        )
+                        sub_choice = sub_choice.strip().lower()
+                        if sub_choice in ("back", "b", "exit", "quit"):
+                            break
+                        if sub_choice == "1":
+                            val = await asyncio.get_event_loop().run_in_executor(
+                                None, 
+                                lambda: session.prompt(HTML("<ansiyellow><b>Enter Gemini API Key: </b></ansiyellow>"))
+                            )
+                            update_env_var("GEMINI_API_KEY", val.strip())
+                            update_env_var("LLM_PROVIDER", "gemini")
+                            console.print("[bold green]✓ Gemini API Key updated and set as active provider.[/]")
+                        elif sub_choice == "2":
+                            model_menu = [
+                                "[bold cyan]── Choose Gemini Model ──[/]",
+                                "  [bold white]1. gemini-2.5-flash[/]",
+                                "  [bold white]2. gemini-2.5-pro[/]",
+                                "  [bold white]3. gemini-1.5-flash[/]",
+                                "  [bold white]4. gemini-1.5-pro[/]",
+                                "  [bold white]5. Custom (type your own model name)[/]",
+                                "",
+                                "[bold dim]Select option (1-5), or type 'back' to return.[/]"
+                            ]
+                            print_panel("Gemini Model Selection", model_menu)
+                            m_choice = await asyncio.get_event_loop().run_in_executor(
+                                None, 
+                                lambda: session.prompt(HTML("<ansiyellow><b>Enter selection: </b></ansiyellow>"))
+                            )
+                            m_choice = m_choice.strip().lower()
+                            selected_model = None
+                            if m_choice == "1": selected_model = "gemini-2.5-flash"
+                            elif m_choice == "2": selected_model = "gemini-2.5-pro"
+                            elif m_choice == "3": selected_model = "gemini-1.5-flash"
+                            elif m_choice == "4": selected_model = "gemini-1.5-pro"
+                            elif m_choice == "5":
+                                val = await asyncio.get_event_loop().run_in_executor(
+                                    None, 
+                                    lambda: session.prompt(HTML("<ansiyellow><b>Enter custom Gemini Model Name: </b></ansiyellow>"))
+                                )
+                                if val.strip(): selected_model = val.strip()
+                            if selected_model:
+                                update_env_var("GEMINI_MODEL", selected_model)
+                                update_env_var("LLM_PROVIDER", "gemini")
+                                console.print("[bold green]✓ Gemini Model updated and set as active provider.[/]")
+                        elif sub_choice == "3":
+                            update_env_var("LLM_PROVIDER", "gemini")
+                            console.print("[bold green]✓ Gemini set as active provider.[/]")
+                            
+                elif choice == "2":  # Anthropic
+                    while True:
+                        sub_lines = [
+                            "[bold cyan]── Anthropic Settings ──[/]",
+                            f"  [bold white]1. API Key[/]:   [dim]{'********' if env.anthropic_api_key else '(not set)'}[/]",
+                            f"  [bold white]2. Model[/]:     [dim]{env.anthropic_model or '(not set)'}[/]",
+                            "",
+                            "  [bold white]3. Set as Active Provider[/]",
+                            "",
+                            "[bold dim]Select setting (1-3) or type 'back' to return.[/]"
+                        ]
+                        print_panel("Anthropic Configuration", sub_lines)
+                        sub_choice = await asyncio.get_event_loop().run_in_executor(
+                            None, 
+                            lambda: session.prompt(HTML("<ansiyellow><b>Anthropic selection: </b></ansiyellow>"))
+                        )
+                        sub_choice = sub_choice.strip().lower()
+                        if sub_choice in ("back", "b", "exit", "quit"):
+                            break
+                        if sub_choice == "1":
+                            val = await asyncio.get_event_loop().run_in_executor(
+                                None, 
+                                lambda: session.prompt(HTML("<ansiyellow><b>Enter Anthropic API Key: </b></ansiyellow>"))
+                            )
+                            update_env_var("ANTHROPIC_API_KEY", val.strip())
+                            update_env_var("LLM_PROVIDER", "anthropic")
+                            console.print("[bold green]✓ Anthropic API Key updated and set as active provider.[/]")
+                        elif sub_choice == "2":
+                            model_menu = [
+                                "[bold cyan]── Choose Anthropic Model ──[/]",
+                                "  [bold white]1. claude-3-5-sonnet-latest[/]",
+                                "  [bold white]2. claude-3-5-haiku-latest[/]",
+                                "  [bold white]3. claude-3-opus-latest[/]",
+                                "  [bold white]4. Custom (type your own model name)[/]",
+                                "",
+                                "[bold dim]Select option (1-4), or type 'back' to return.[/]"
+                            ]
+                            print_panel("Anthropic Model Selection", model_menu)
+                            m_choice = await asyncio.get_event_loop().run_in_executor(
+                                None, 
+                                lambda: session.prompt(HTML("<ansiyellow><b>Enter selection: </b></ansiyellow>"))
+                            )
+                            m_choice = m_choice.strip().lower()
+                            selected_model = None
+                            if m_choice == "1": selected_model = "claude-3-5-sonnet-latest"
+                            elif m_choice == "2": selected_model = "claude-3-5-haiku-latest"
+                            elif m_choice == "3": selected_model = "claude-3-opus-latest"
+                            elif m_choice == "4":
+                                val = await asyncio.get_event_loop().run_in_executor(
+                                    None, 
+                                    lambda: session.prompt(HTML("<ansiyellow><b>Enter custom Anthropic Model Name: </b></ansiyellow>"))
+                                )
+                                if val.strip(): selected_model = val.strip()
+                            if selected_model:
+                                update_env_var("ANTHROPIC_MODEL", selected_model)
+                                update_env_var("LLM_PROVIDER", "anthropic")
+                                console.print("[bold green]✓ Anthropic Model updated and set as active provider.[/]")
+                        elif sub_choice == "3":
+                            update_env_var("LLM_PROVIDER", "anthropic")
+                            console.print("[bold green]✓ Anthropic set as active provider.[/]")
+                            
+                elif choice == "3":  # Bedrock
+                    while True:
+                        sub_lines = [
+                            "[bold cyan]── AWS Bedrock Settings ──[/]",
+                            f"  [bold white]1. Access Key ID[/]:  [dim]{'********' if env.aws_access_key_id else '(not set)'}[/]",
+                            f"  [bold white]2. Secret Key[/]:     [dim]{'********' if env.aws_secret_access_key else '(not set)'}[/]",
+                            f"  [bold white]3. Region[/]:         [dim]{env.aws_region or '(not set)'}[/]",
+                            f"  [bold white]4. Model ID[/]:       [dim]{env.bedrock_model_id or '(not set)'}[/]",
+                            "",
+                            "  [bold white]5. Set as Active Provider[/]",
+                            "",
+                            "[bold dim]Select setting (1-5) or type 'back' to return.[/]"
+                        ]
+                        print_panel("AWS Bedrock Configuration", sub_lines)
+                        sub_choice = await asyncio.get_event_loop().run_in_executor(
+                            None, 
+                            lambda: session.prompt(HTML("<ansiyellow><b>Bedrock selection: </b></ansiyellow>"))
+                        )
+                        sub_choice = sub_choice.strip().lower()
+                        if sub_choice in ("back", "b", "exit", "quit"):
+                            break
+                        if sub_choice == "1":
+                            val = await asyncio.get_event_loop().run_in_executor(
+                                None, 
+                                lambda: session.prompt(HTML("<ansiyellow><b>Enter AWS Access Key ID: </b></ansiyellow>"))
+                            )
+                            update_env_var("AWS_ACCESS_KEY_ID", val.strip())
+                            update_env_var("LLM_PROVIDER", "bedrock")
+                            console.print("[bold green]✓ AWS Access Key ID updated and set as active provider.[/]")
+                        elif sub_choice == "2":
+                            val = await asyncio.get_event_loop().run_in_executor(
+                                None, 
+                                lambda: session.prompt(HTML("<ansiyellow><b>Enter AWS Secret Access Key: </b></ansiyellow>"))
+                            )
+                            update_env_var("AWS_SECRET_ACCESS_KEY", val.strip())
+                            update_env_var("LLM_PROVIDER", "bedrock")
+                            console.print("[bold green]✓ AWS Secret Access Key updated and set as active provider.[/]")
+                        elif sub_choice == "3":
+                            val = await asyncio.get_event_loop().run_in_executor(
+                                None, 
+                                lambda: session.prompt(HTML("<ansiyellow><b>Enter AWS Region (default us-east-1): </b></ansiyellow>"))
+                            )
+                            update_env_var("AWS_REGION", val.strip())
+                            update_env_var("LLM_PROVIDER", "bedrock")
+                            console.print("[bold green]✓ AWS Region updated and set as active provider.[/]")
+                        elif sub_choice == "4":
+                            model_menu = [
+                                "[bold cyan]── Choose Bedrock Model ──[/]",
+                                "  [bold white]1. anthropic.claude-3-5-sonnet-20241022-v2:0[/]",
+                                "  [bold white]2. anthropic.claude-3-5-haiku-20241022-v1:0[/]",
+                                "  [bold white]3. meta.llama3-1-70b-instruct-v1:0[/]",
+                                "  [bold white]4. amazon.titan-text-express-v1[/]",
+                                "  [bold white]5. Custom (type your own model name)[/]",
+                                "",
+                                "[bold dim]Select option (1-5), or type 'back' to return.[/]"
+                            ]
+                            print_panel("Bedrock Model Selection", model_menu)
+                            m_choice = await asyncio.get_event_loop().run_in_executor(
+                                None, 
+                                lambda: session.prompt(HTML("<ansiyellow><b>Enter selection: </b></ansiyellow>"))
+                            )
+                            m_choice = m_choice.strip().lower()
+                            selected_model = None
+                            if m_choice == "1": selected_model = "anthropic.claude-3-5-sonnet-20241022-v2:0"
+                            elif m_choice == "2": selected_model = "anthropic.claude-3-5-haiku-20241022-v1:0"
+                            elif m_choice == "3": selected_model = "meta.llama3-1-70b-instruct-v1:0"
+                            elif m_choice == "4": selected_model = "amazon.titan-text-express-v1"
+                            elif m_choice == "5":
+                                val = await asyncio.get_event_loop().run_in_executor(
+                                    None, 
+                                    lambda: session.prompt(HTML("<ansiyellow><b>Enter custom Bedrock Model ID: </b></ansiyellow>"))
+                                )
+                                if val.strip(): selected_model = val.strip()
+                            if selected_model:
+                                update_env_var("BEDROCK_MODEL_ID", selected_model)
+                                update_env_var("LLM_PROVIDER", "bedrock")
+                                console.print("[bold green]✓ Bedrock Model ID updated and set as active provider.[/]")
+                        elif sub_choice == "5":
+                            update_env_var("LLM_PROVIDER", "bedrock")
+                            console.print("[bold green]✓ AWS Bedrock set as active provider.[/]")
+                            
+                elif choice == "4":  # NVIDIA
+                    while True:
+                        sub_lines = [
+                            "[bold cyan]── NVIDIA NIM Settings ──[/]",
+                            f"  [bold white]1. API Key[/]:   [dim]{'********' if env.nvidia_api_key else '(not set)'}[/]",
+                            f"  [bold white]2. Model[/]:     [dim]{env.nvidia_model or '(not set)'}[/]",
+                            "",
+                            "  [bold white]3. Set as Active Provider[/]",
+                            "",
+                            "[bold dim]Select setting (1-3) or type 'back' to return.[/]"
+                        ]
+                        print_panel("NVIDIA NIM Configuration", sub_lines)
+                        sub_choice = await asyncio.get_event_loop().run_in_executor(
+                            None, 
+                            lambda: session.prompt(HTML("<ansiyellow><b>NVIDIA selection: </b></ansiyellow>"))
+                        )
+                        sub_choice = sub_choice.strip().lower()
+                        if sub_choice in ("back", "b", "exit", "quit"):
+                            break
+                        if sub_choice == "1":
+                            val = await asyncio.get_event_loop().run_in_executor(
+                                None, 
+                                lambda: session.prompt(HTML("<ansiyellow><b>Enter NVIDIA API Key: </b></ansiyellow>"))
+                            )
+                            update_env_var("NVIDIA_API_KEY", val.strip())
+                            update_env_var("LLM_PROVIDER", "nvidia")
+                            console.print("[bold green]✓ NVIDIA API Key updated and set as active provider.[/]")
+                        elif sub_choice == "2":
+                            model_menu = [
+                                "[bold cyan]── Choose NVIDIA NIM Model ──[/]",
+                                "  [bold white]1. meta/llama-3.1-70b-instruct[/]",
+                                "  [bold white]2. meta/llama-3.1-8b-instruct[/]",
+                                "  [bold white]3. nvidia/llama-3.1-nemotron-51b-instruct[/]",
+                                "  [bold white]4. mistralai/mixtral-8x22b-instruct-v0.1[/]",
+                                "  [bold white]5. Custom (type your own model name)[/]",
+                                "",
+                                "[bold dim]Select option (1-5), or type 'back' to return.[/]"
+                            ]
+                            print_panel("NVIDIA NIM Model Selection", model_menu)
+                            m_choice = await asyncio.get_event_loop().run_in_executor(
+                                None, 
+                                lambda: session.prompt(HTML("<ansiyellow><b>Enter selection: </b></ansiyellow>"))
+                            )
+                            m_choice = m_choice.strip().lower()
+                            selected_model = None
+                            if m_choice == "1": selected_model = "meta/llama-3.1-70b-instruct"
+                            elif m_choice == "2": selected_model = "meta/llama-3.1-8b-instruct"
+                            elif m_choice == "3": selected_model = "nvidia/llama-3.1-nemotron-51b-instruct"
+                            elif m_choice == "4": selected_model = "mistralai/mixtral-8x22b-instruct-v0.1"
+                            elif m_choice == "5":
+                                val = await asyncio.get_event_loop().run_in_executor(
+                                    None, 
+                                    lambda: session.prompt(HTML("<ansiyellow><b>Enter custom NVIDIA Model Name: </b></ansiyellow>"))
+                                )
+                                if val.strip(): selected_model = val.strip()
+                            if selected_model:
+                                update_env_var("NVIDIA_MODEL", selected_model)
+                                update_env_var("LLM_PROVIDER", "nvidia")
+                                console.print("[bold green]✓ NVIDIA Model updated and set as active provider.[/]")
+                        elif sub_choice == "3":
+                            update_env_var("LLM_PROVIDER", "nvidia")
+                            console.print("[bold green]✓ NVIDIA set as active provider.[/]")
+                            
+                elif choice == "5":  # Mistral
+                    while True:
+                        sub_lines = [
+                            "[bold cyan]── Mistral AI Settings ──[/]",
+                            f"  [bold white]1. API Key[/]:   [dim]{'********' if env.mistral_api_key else '(not set)'}[/]",
+                            f"  [bold white]2. Model[/]:     [dim]{env.mistral_model or '(not set)'}[/]",
+                            "",
+                            "  [bold white]3. Set as Active Provider[/]",
+                            "",
+                            "[bold dim]Select setting (1-3) or type 'back' to return.[/]"
+                        ]
+                        print_panel("Mistral AI Configuration", sub_lines)
+                        sub_choice = await asyncio.get_event_loop().run_in_executor(
+                            None, 
+                            lambda: session.prompt(HTML("<ansiyellow><b>Mistral selection: </b></ansiyellow>"))
+                        )
+                        sub_choice = sub_choice.strip().lower()
+                        if sub_choice in ("back", "b", "exit", "quit"):
+                            break
+                        if sub_choice == "1":
+                            val = await asyncio.get_event_loop().run_in_executor(
+                                None, 
+                                lambda: session.prompt(HTML("<ansiyellow><b>Enter Mistral API Key: </b></ansiyellow>"))
+                            )
+                            update_env_var("MISTRAL_API_KEY", val.strip())
+                            update_env_var("LLM_PROVIDER", "mistral")
+                            console.print("[bold green]✓ Mistral API Key updated and set as active provider.[/]")
+                        elif sub_choice == "2":
+                            model_menu = [
+                                "[bold cyan]── Choose Mistral Model ──[/]",
+                                "  [bold white]1. mistral-large-latest[/]",
+                                "  [bold white]2. open-mixtral-8x22b[/]",
+                                "  [bold white]3. mistral-small-latest[/]",
+                                "  [bold white]4. codestral-latest[/]",
+                                "  [bold white]5. Custom (type your own model name)[/]",
+                                "",
+                                "[bold dim]Select option (1-5), or type 'back' to return.[/]"
+                            ]
+                            print_panel("Mistral Model Selection", model_menu)
+                            m_choice = await asyncio.get_event_loop().run_in_executor(
+                                None, 
+                                lambda: session.prompt(HTML("<ansiyellow><b>Enter selection: </b></ansiyellow>"))
+                            )
+                            m_choice = m_choice.strip().lower()
+                            selected_model = None
+                            if m_choice == "1": selected_model = "mistral-large-latest"
+                            elif m_choice == "2": selected_model = "open-mixtral-8x22b"
+                            elif m_choice == "3": selected_model = "mistral-small-latest"
+                            elif m_choice == "4": selected_model = "codestral-latest"
+                            elif m_choice == "5":
+                                val = await asyncio.get_event_loop().run_in_executor(
+                                    None, 
+                                    lambda: session.prompt(HTML("<ansiyellow><b>Enter custom Mistral Model Name: </b></ansiyellow>"))
+                                )
+                                if val.strip(): selected_model = val.strip()
+                            if selected_model:
+                                update_env_var("MISTRAL_MODEL", selected_model)
+                                update_env_var("LLM_PROVIDER", "mistral")
+                                console.print("[bold green]✓ Mistral Model updated and set as active provider.[/]")
+                        elif sub_choice == "3":
+                            update_env_var("LLM_PROVIDER", "mistral")
+                            console.print("[bold green]✓ Mistral set as active provider.[/]")
+                            
+                elif choice == "6":  # Azure AI Foundry
+                    while True:
+                        sub_lines = [
+                            "[bold cyan]── Azure AI Foundry Settings ──[/]",
+                            f"  [bold white]1. Endpoint URL[/]: [dim]{env.foundry_endpoint or '(not set)'}[/]",
+                            f"  [bold white]2. API Key[/]:     [dim]{'********' if env.foundry_api_key else '(not set)'}[/]",
+                            f"  [bold white]3. Model[/]:       [dim]{env.foundry_model or '(not set)'}[/]",
+                            "",
+                            "  [bold white]4. Set as Active Provider[/]",
+                            "",
+                            "[bold dim]Select setting (1-4) or type 'back' to return.[/]"
+                        ]
+                        print_panel("Azure AI Foundry Configuration", sub_lines)
+                        sub_choice = await asyncio.get_event_loop().run_in_executor(
+                            None, 
+                            lambda: session.prompt(HTML("<ansiyellow><b>Foundry selection: </b></ansiyellow>"))
+                        )
+                        sub_choice = sub_choice.strip().lower()
+                        if sub_choice in ("back", "b", "exit", "quit"):
+                            break
+                        if sub_choice == "1":
+                            val = await asyncio.get_event_loop().run_in_executor(
+                                None, 
+                                lambda: session.prompt(HTML("<ansiyellow><b>Enter Foundry Endpoint URL: </b></ansiyellow>"))
+                            )
+                            update_env_var("FOUNDRY_ENDPOINT", val.strip())
+                            update_env_var("LLM_PROVIDER", "azure_ai_foundry")
+                            console.print("[bold green]✓ Foundry Endpoint updated and set as active provider.[/]")
+                        elif sub_choice == "2":
+                            val = await asyncio.get_event_loop().run_in_executor(
+                                None, 
+                                lambda: session.prompt(HTML("<ansiyellow><b>Enter Foundry API Key: </b></ansiyellow>"))
+                            )
+                            update_env_var("FOUNDRY_API_KEY", val.strip())
+                            update_env_var("LLM_PROVIDER", "azure_ai_foundry")
+                            console.print("[bold green]✓ Foundry API Key updated and set as active provider.[/]")
+                        elif sub_choice == "3":
+                            model_menu = [
+                                "[bold cyan]── Choose Foundry Model ──[/]",
+                                "  [bold white]1. gpt-4o[/]",
+                                "  [bold white]2. gpt-4-turbo[/]",
+                                "  [bold white]3. gpt-35-turbo[/]",
+                                "  [bold white]4. Custom (type your own model name)[/]",
+                                "",
+                                "[bold dim]Select option (1-4), or type 'back' to return.[/]"
+                            ]
+                            print_panel("Foundry Model Selection", model_menu)
+                            m_choice = await asyncio.get_event_loop().run_in_executor(
+                                None, 
+                                lambda: session.prompt(HTML("<ansiyellow><b>Enter selection: </b></ansiyellow>"))
+                            )
+                            m_choice = m_choice.strip().lower()
+                            selected_model = None
+                            if m_choice == "1": selected_model = "gpt-4o"
+                            elif m_choice == "2": selected_model = "gpt-4-turbo"
+                            elif m_choice == "3": selected_model = "gpt-35-turbo"
+                            elif m_choice == "4":
+                                val = await asyncio.get_event_loop().run_in_executor(
+                                    None, 
+                                    lambda: session.prompt(HTML("<ansiyellow><b>Enter custom Foundry Model Name: </b></ansiyellow>"))
+                                )
+                                if val.strip(): selected_model = val.strip()
+                            if selected_model:
+                                update_env_var("FOUNDRY_MODEL", selected_model)
+                                update_env_var("LLM_PROVIDER", "azure_ai_foundry")
+                                console.print("[bold green]✓ Foundry Model updated and set as active provider.[/]")
+                        elif sub_choice == "4":
+                            update_env_var("LLM_PROVIDER", "azure_ai_foundry")
+                            console.print("[bold green]✓ Azure AI Foundry set as active provider.[/]")
+                            
+                elif choice == "7":  # Open Source
+                    while True:
+                        sub_lines = [
+                            "[bold cyan]── Open Source (Ollama/vLLM) Settings ──[/]",
+                            f"  [bold white]1. Base URL[/]:  [dim]{env.os_base_url or '(not set)'}[/]",
+                            f"  [bold white]2. Model[/]:     [dim]{env.os_model or '(not set)'}[/]",
+                            f"  [bold white]3. API Key[/]:   [dim]{'********' if env.os_api_key else '(not set)'}[/]",
+                            "",
+                            "  [bold white]4. Set as Active Provider[/]",
+                            "",
+                            "[bold dim]Select setting (1-4) or type 'back' to return.[/]"
+                        ]
+                        print_panel("Open Source Configuration", sub_lines)
+                        sub_choice = await asyncio.get_event_loop().run_in_executor(
+                            None, 
+                            lambda: session.prompt(HTML("<ansiyellow><b>Open Source selection: </b></ansiyellow>"))
+                        )
+                        sub_choice = sub_choice.strip().lower()
+                        if sub_choice in ("back", "b", "exit", "quit"):
+                            break
+                        if sub_choice == "1":
+                            val = await asyncio.get_event_loop().run_in_executor(
+                                None, 
+                                lambda: session.prompt(HTML("<ansiyellow><b>Enter Base URL: </b></ansiyellow>"))
+                            )
+                            update_env_var("OS_BASE_URL", val.strip())
+                            update_env_var("LLM_PROVIDER", "open_source")
+                            console.print("[bold green]✓ Base URL updated and set as active provider.[/]")
+                        elif sub_choice == "2":
+                            model_menu = [
+                                "[bold cyan]── Choose OS Model ──[/]",
+                                "  [bold white]1. llama3[/]",
+                                "  [bold white]2. llama3:8b[/]",
+                                "  [bold white]3. mistral[/]",
+                                "  [bold white]4. phi3[/]",
+                                "  [bold white]5. qwen2.5-coder[/]",
+                                "  [bold white]6. Custom (type your own model name)[/]",
+                                "",
+                                "[bold dim]Select option (1-6), or type 'back' to return.[/]"
+                            ]
+                            print_panel("OS Model Selection", model_menu)
+                            m_choice = await asyncio.get_event_loop().run_in_executor(
+                                None, 
+                                lambda: session.prompt(HTML("<ansiyellow><b>Enter selection: </b></ansiyellow>"))
+                            )
+                            m_choice = m_choice.strip().lower()
+                            selected_model = None
+                            if m_choice == "1": selected_model = "llama3"
+                            elif m_choice == "2": selected_model = "llama3:8b"
+                            elif m_choice == "3": selected_model = "mistral"
+                            elif m_choice == "4": selected_model = "phi3"
+                            elif m_choice == "5": selected_model = "qwen2.5-coder"
+                            elif m_choice == "6":
+                                val = await asyncio.get_event_loop().run_in_executor(
+                                    None, 
+                                    lambda: session.prompt(HTML("<ansiyellow><b>Enter custom OS Model Name: </b></ansiyellow>"))
+                                )
+                                if val.strip(): selected_model = val.strip()
+                            if selected_model:
+                                update_env_var("OS_MODEL", selected_model)
+                                update_env_var("LLM_PROVIDER", "open_source")
+                                console.print("[bold green]✓ OS Model updated and set as active provider.[/]")
+                        elif sub_choice == "3":
+                            val = await asyncio.get_event_loop().run_in_executor(
+                                None, 
+                                lambda: session.prompt(HTML("<ansiyellow><b>Enter OS API Key (optional): </b></ansiyellow>"))
+                            )
+                            update_env_var("OS_API_KEY", val.strip())
+                            update_env_var("LLM_PROVIDER", "open_source")
+                            console.print("[bold green]✓ OS API Key updated and set as active provider.[/]")
+                        elif sub_choice == "4":
+                            update_env_var("LLM_PROVIDER", "open_source")
+                            console.print("[bold green]✓ Open Source set as active provider.[/]")
+                            
+                elif choice == "8":  # Azure OpenAI
+                    while True:
+                        sub_lines = [
+                            "[bold cyan]── Azure OpenAI Settings ──[/]",
+                            f"  [bold white]1. Endpoint URL[/]: [dim]{env.azure_endpoint or '(not set)'}[/]",
+                            f"  [bold white]2. API Key[/]:     [dim]{'********' if env.azure_api_key else '(not set)'}[/]",
+                            f"  [bold white]3. Deployment[/]:  [dim]{env.azure_deployment or '(not set)'}[/]",
+                            f"  [bold white]4. API Version[/]:  [dim]{env.azure_api_version or '(not set)'}[/]",
+                            "",
+                            "  [bold white]5. Set as Active Provider[/]",
+                            "",
+                            "[bold dim]Select setting (1-5) or type 'back' to return.[/]"
+                        ]
+                        print_panel("Azure OpenAI Configuration", sub_lines)
+                        sub_choice = await asyncio.get_event_loop().run_in_executor(
+                            None, 
+                            lambda: session.prompt(HTML("<ansiyellow><b>Azure selection: </b></ansiyellow>"))
+                        )
+                        sub_choice = sub_choice.strip().lower()
+                        if sub_choice in ("back", "b", "exit", "quit"):
+                            break
+                        if sub_choice == "1":
+                            val = await asyncio.get_event_loop().run_in_executor(
+                                None, 
+                                lambda: session.prompt(HTML("<ansiyellow><b>Enter Azure Endpoint URL: </b></ansiyellow>"))
+                            )
+                            update_env_var("AZURE_OPENAI_ENDPOINT", val.strip())
+                            update_env_var("LLM_PROVIDER", "azure")
+                            console.print("[bold green]✓ Azure Endpoint updated and set as active provider.[/]")
+                        elif sub_choice == "2":
+                            val = await asyncio.get_event_loop().run_in_executor(
+                                None, 
+                                lambda: session.prompt(HTML("<ansiyellow><b>Enter Azure API Key: </b></ansiyellow>"))
+                            )
+                            update_env_var("AZURE_OPENAI_API_KEY", val.strip())
+                            update_env_var("LLM_PROVIDER", "azure")
+                            console.print("[bold green]✓ Azure API Key updated and set as active provider.[/]")
+                        elif sub_choice == "3":
+                            model_menu = [
+                                "[bold cyan]── Choose Azure Deployment Model ──[/]",
+                                "  [bold white]1. gpt-4o[/]",
+                                "  [bold white]2. gpt-4-turbo[/]",
+                                "  [bold white]3. gpt-35-turbo[/]",
+                                "  [bold white]4. Custom (type your own deployment name)[/]",
+                                "",
+                                "[bold dim]Select option (1-4), or type 'back' to return.[/]"
+                            ]
+                            print_panel("Azure OpenAI Deployment Selection", model_menu)
+                            m_choice = await asyncio.get_event_loop().run_in_executor(
+                                None, 
+                                lambda: session.prompt(HTML("<ansiyellow><b>Enter selection: </b></ansiyellow>"))
+                            )
+                            m_choice = m_choice.strip().lower()
+                            selected_model = None
+                            if m_choice == "1": selected_model = "gpt-4o"
+                            elif m_choice == "2": selected_model = "gpt-4-turbo"
+                            elif m_choice == "3": selected_model = "gpt-35-turbo"
+                            elif m_choice == "4":
+                                val = await asyncio.get_event_loop().run_in_executor(
+                                    None, 
+                                    lambda: session.prompt(HTML("<ansiyellow><b>Enter custom Deployment Name: </b></ansiyellow>"))
+                                )
+                                if val.strip(): selected_model = val.strip()
+                            if selected_model:
+                                update_env_var("AZURE_OPENAI_DEPLOYMENT", selected_model)
+                                update_env_var("LLM_PROVIDER", "azure")
+                                console.print("[bold green]✓ Azure Deployment updated and set as active provider.[/]")
+                        elif sub_choice == "4":
+                            val = await asyncio.get_event_loop().run_in_executor(
+                                None, 
+                                lambda: session.prompt(HTML("<ansiyellow><b>Enter API Version: </b></ansiyellow>"))
+                            )
+                            update_env_var("AZURE_OPENAI_API_VERSION", val.strip())
+                            update_env_var("LLM_PROVIDER", "azure")
+                            console.print("[bold green]✓ Azure API Version updated and set as active provider.[/]")
+                        elif sub_choice == "5":
+                            update_env_var("LLM_PROVIDER", "azure")
+                            console.print("[bold green]✓ Azure OpenAI set as active provider.[/]")
+                            
+                elif choice == "9":  # Generic
+                    while True:
+                        sub_lines = [
+                            "[bold cyan]── Generic OpenAI-Compatible Settings ──[/]",
+                            f"  [bold white]1. Base URL[/]:  [dim]{env.llm_base_url or '(not set)'}[/]",
+                            f"  [bold white]2. API Key[/]:   [dim]{'********' if env.llm_api_key else '(not set)'}[/]",
+                            f"  [bold white]3. Model[/]:     [dim]{env.llm_model or '(not set)'}[/]",
+                            "",
+                            "  [bold white]4. Set as Active Provider[/]",
+                            "",
+                            "[bold dim]Select setting (1-4) or type 'back' to return.[/]"
+                        ]
+                        print_panel("Generic LLM Configuration", sub_lines)
+                        sub_choice = await asyncio.get_event_loop().run_in_executor(
+                            None, 
+                            lambda: session.prompt(HTML("<ansiyellow><b>Generic selection: </b></ansiyellow>"))
+                        )
+                        sub_choice = sub_choice.strip().lower()
+                        if sub_choice in ("back", "b", "exit", "quit"):
+                            break
+                        if sub_choice == "1":
+                            val = await asyncio.get_event_loop().run_in_executor(
+                                None, 
+                                lambda: session.prompt(HTML("<ansiyellow><b>Enter Base URL: </b></ansiyellow>"))
+                            )
+                            update_env_var("LLM_BASE_URL", val.strip())
+                            update_env_var("LLM_PROVIDER", "generic")
+                            console.print("[bold green]✓ LLM Base URL updated and set as active provider.[/]")
+                        elif sub_choice == "2":
+                            val = await asyncio.get_event_loop().run_in_executor(
+                                None, 
+                                lambda: session.prompt(HTML("<ansiyellow><b>Enter API Key: </b></ansiyellow>"))
+                            )
+                            update_env_var("LLM_API_KEY", val.strip())
+                            update_env_var("LLM_PROVIDER", "generic")
+                            console.print("[bold green]✓ LLM API Key updated and set as active provider.[/]")
+                        elif sub_choice == "3":
+                            model_menu = [
+                                "[bold cyan]── Choose Generic Model ──[/]",
+                                "  [bold white]1. gpt-4o[/]",
+                                "  [bold white]2. gpt-4-turbo[/]",
+                                "  [bold white]3. gpt-3.5-turbo[/]",
+                                "  [bold white]4. Custom (type your own model name)[/]",
+                                "",
+                                "[bold dim]Select option (1-4), or type 'back' to return.[/]"
+                            ]
+                            print_panel("Generic Model Selection", model_menu)
+                            m_choice = await asyncio.get_event_loop().run_in_executor(
+                                None, 
+                                lambda: session.prompt(HTML("<ansiyellow><b>Enter selection: </b></ansiyellow>"))
+                            )
+                            m_choice = m_choice.strip().lower()
+                            selected_model = None
+                            if m_choice == "1": selected_model = "gpt-4o"
+                            elif m_choice == "2": selected_model = "gpt-4-turbo"
+                            elif m_choice == "3": selected_model = "gpt-3.5-turbo"
+                            elif m_choice == "4":
+                                val = await asyncio.get_event_loop().run_in_executor(
+                                    None, 
+                                    lambda: session.prompt(HTML("<ansiyellow><b>Enter custom Model Name: </b></ansiyellow>"))
+                                )
+                                if val.strip(): selected_model = val.strip()
+                            if selected_model:
+                                update_env_var("LLM_MODEL", selected_model)
+                                update_env_var("LLM_PROVIDER", "generic")
+                                console.print("[bold green]✓ LLM Model updated and set as active provider.[/]")
+                        elif sub_choice == "4":
+                            update_env_var("LLM_PROVIDER", "generic")
+                            console.print("[bold green]✓ Generic OpenAI-compatible set as active provider.[/]")
+                            
+                elif choice == "10":  # Mock Mode
+                    val = await asyncio.get_event_loop().run_in_executor(
+                        None, 
+                        lambda: session.prompt(HTML("<ansiyellow><b>Enable Mock Mode? (y/n): </b></ansiyellow>"))
+                    )
+                    is_mock = "true" if val.strip().lower() in ("y", "yes", "true", "1") else "false"
+                    update_env_var("SDLC_USE_MOCK", is_mock)
+                    console.print(f"[bold green]✓ Mock Mode set to {is_mock}.[/]")
+                    
+                elif choice == "11":  # SSL Verify
+                    val = await asyncio.get_event_loop().run_in_executor(
+                        None, 
+                        lambda: session.prompt(HTML("<ansiyellow><b>Enable SSL Verification? (y/n): </b></ansiyellow>"))
+                    )
+                    skip_ssl = "false" if val.strip().lower() in ("y", "yes", "true", "1") else "true"
+                    update_env_var("SDLC_SKIP_SSL_VERIFY", skip_ssl)
+                    console.print(f"[bold green]✓ SSL Verification set to {'Enabled' if skip_ssl == 'false' else 'Disabled'}.[/]")
+                    
+                else:
+                    console.print("[bold red]✗ Invalid selection. Please enter 1-11 or 'exit'.[/]")
+            
+            return None, None, False
+        else:
+            return {"title": "Configuration Help", "output": [
+                "Usage for configure command:",
+                "  [bold green]configure[/]                      Enter interactive personalization menu",
+                "  [bold green]configure show[/]                 Display current active configurations",
+                "  [bold green]configure set <key> <value>[/]    Directly set a configuration key",
+                "",
+                "Valid keys:",
+                "  [cyan]provider[/], [cyan]mock[/], [cyan]ssl[/]",
+                "  [cyan]gemini_api_key[/], [cyan]gemini_model[/]",
+                "  [cyan]anthropic_api_key[/], [cyan]anthropic_model[/]",
+                "  [cyan]aws_access_key_id[/], [cyan]aws_secret_access_key[/], [cyan]aws_region[/], [cyan]bedrock_model_id[/]",
+                "  [cyan]nvidia_api_key[/], [cyan]nvidia_model[/]",
+                "  [cyan]mistral_api_key[/], [cyan]mistral_model[/]",
+                "  [cyan]foundry_endpoint[/], [cyan]foundry_api_key[/], [cyan]foundry_model[/]",
+                "  [cyan]os_base_url[/], [cyan]os_model[/], [cyan]os_api_key[/]",
+                "  [cyan]azure_endpoint[/], [cyan]azure_api_key[/], [cyan]azure_deployment[/], [cyan]azure_api_version[/]",
+                "  [cyan]llm_base_url[/], [cyan]llm_api_key[/], [cyan]llm_model[/]"
+            ]}, None, False
+
     intent = await parse_nexus_intent_with_llm(raw)
     c, a = intent.command, intent.args
 

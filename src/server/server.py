@@ -75,6 +75,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def reload_env_middleware(request, call_next):
+    from ..config.env import reload_env
+    reload_env()
+    return await call_next(request)
+
 # ── Utility ──────────────────────────────────────────────────
 AVAILABLE_MODES = [
     ModeInfo(id="command", label="Nexus", color="#00ff00", description="Main command hub & freeform AI chat"),
@@ -293,6 +299,8 @@ async def system_version():
 @app.websocket("/ws/chat")
 async def websocket_chat(websocket: WebSocket):
     await websocket.accept()
+    from ..config.env import reload_env
+    reload_env()
     from ..core.agent_loop import AgentLoop
     agent = AgentLoop()
 
@@ -388,6 +396,8 @@ async def websocket_chat(websocket: WebSocket):
                     await websocket.send_json({"type": "error", "message": "Empty message"})
                     continue
 
+                from ..config.env import reload_env
+                reload_env()
                 await websocket.send_json({"type": "thinking", "message": "Thinking..."})
                 active_task = asyncio.create_task(run_agent_turn(agent.start_turn(message)))
 

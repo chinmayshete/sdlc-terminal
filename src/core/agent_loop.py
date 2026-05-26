@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List, Literal, Tuple, Union
 from .tools import run_command_tool, edit_file_tool, read_file_tool, list_dir_tool
-from ..utils.llm import _call_azure_json, _use_azure
+from ..utils.llm import _call_llm_json, _use_llm
 from ..config.paths import paths
 
 SYSTEM_PROMPT = """You are Nexus, an autonomous SDLC engineering agent.
@@ -82,14 +82,14 @@ class AgentLoop:
 
     async def _next_step(self) -> Dict[str, Any]:
         """Runs the next iteration of the agent loop by calling the LLM."""
-        if not _use_azure():
+        if not _use_llm():
             # Mock mode fallback
             user_msg = self.history[-1]["content"] if self.history else ""
             return self._mock_respond(user_msg)
 
         try:
-            # Call Azure OpenAI JSON endpoint
-            response_json = await _call_azure_json(self.history, temperature=0.2)
+            # Call LLM JSON endpoint
+            response_json = await _call_llm_json(self.history, temperature=0.2)
         except Exception as e:
             return {"type": "error", "message": f"LLM Error: {str(e)}"}
 
@@ -212,7 +212,7 @@ class AgentLoop:
             }
 
         # Normal response
-        msg = f"Mock Agent: I received your request '{prompt}'. Please configure Azure OpenAI in `.env` for full autonomous agent functionality."
+        msg = f"Mock Agent: I received your request '{prompt}'. Please configure an LLM in `.env` for full autonomous agent functionality."
         resp = {
             "thought": "Replying with mock guidance.",
             "tool": None,

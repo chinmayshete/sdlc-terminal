@@ -3,12 +3,17 @@ from __future__ import annotations
 import asyncio, sys
 
 def main():
-    """Main entry point — launches the interactive terminal by default."""
+    """Main entry point — launches the interactive terminal by default, or runs CLI command."""
+    import sys
     try:
-        from .core.orchestrator import Orchestrator
-        from .cli.terminal import run_terminal
-        orchestrator = Orchestrator()
-        asyncio.run(run_terminal(orchestrator))
+        if len(sys.argv) > 1:
+            from src.cli.program import cli
+            cli()
+        else:
+            from src.core.orchestrator import Orchestrator
+            from src.cli.terminal import run_terminal
+            orchestrator = Orchestrator()
+            asyncio.run(run_terminal(orchestrator))
     except KeyboardInterrupt:
         print("\nSession closed.")
         sys.exit(0)

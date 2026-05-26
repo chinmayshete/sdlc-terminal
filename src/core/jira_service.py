@@ -10,8 +10,8 @@ class JiraService:
         if not self._configured(): return []
         try:
             jql = f"project={env.jira_project_key} ORDER BY priority DESC"
-            data = await self._request(f"/rest/api/3/search/jql?jql={jql}&fields=summary,description,priority&maxResults=20")
-            return [self._parse_issue(i) for i in data.get("issues", [])]
+            data = await self._http("POST", "/rest/api/3/search/jql", {"jql": jql, "fields": ["summary", "description", "priority"], "maxResults": 20})
+            return [self._parse_issue(i) for i in (data.get("issues", []) if data else [])]
         except Exception as e:
             print(f"[Jira] Error fetching tickets: {e}")
             return []
@@ -67,8 +67,8 @@ class JiraService:
         if not self._configured(): return []
         try:
             jql = f"project={env.jira_project_key} AND issuetype=Epic ORDER BY created DESC"
-            data = await self._request(f"/rest/api/3/search/jql?jql={jql}&fields=summary,status&maxResults=20")
-            return data.get("issues", [])
+            data = await self._http("POST", "/rest/api/3/search/jql", {"jql": jql, "fields": ["summary", "status"], "maxResults": 20})
+            return data.get("issues", []) if data else []
         except Exception as e:
             print(f"[Jira] Error fetching epics: {e}")
             return []
@@ -85,8 +85,8 @@ class JiraService:
         if not self._configured(): return []
         try:
             jql = f"parent={parent_id} ORDER BY created ASC"
-            data = await self._request(f"/rest/api/3/search/jql?jql={jql}&fields=summary,status,issuetype,priority,customfield_10014&maxResults=50")
-            return data.get("issues", [])
+            data = await self._http("POST", "/rest/api/3/search/jql", {"jql": jql, "fields": ["summary", "status", "issuetype", "priority", "customfield_10014"], "maxResults": 50})
+            return data.get("issues", []) if data else []
         except Exception as e:
             print(f"[Jira] Error fetching children for {parent_id}: {e}")
             return []
@@ -96,7 +96,8 @@ class JiraService:
         try:
             from urllib.parse import quote
             jql = f'project="{env.jira_project_key}" AND issuetype="{issuetype}" ORDER BY created DESC'
-            data = await self._request(f"/rest/api/3/search/jql?jql={quote(jql)}&fields=summary,status,issuetype,priority&maxResults=50")
+            data = await self._http("POST", "/rest/api/3/search/jql", {"jql": jql, "fields": ["summary", "status", "issuetype", "priority"], "maxResults": 50})
+            if not data: return []
             # Client-side guard: ensure only the requested issuetype is returned
             return [
                 i for i in data.get("issues", [])
@@ -110,8 +111,8 @@ class JiraService:
         if not self._configured(): return []
         try:
             jql = f"project={env.jira_project_key} ORDER BY status DESC, priority DESC"
-            data = await self._request(f"/rest/api/3/search/jql?jql={jql}&fields=summary,status,issuetype,priority&maxResults=50")
-            return data.get("issues", [])
+            data = await self._http("POST", "/rest/api/3/search/jql", {"jql": jql, "fields": ["summary", "status", "issuetype", "priority"], "maxResults": 50})
+            return data.get("issues", []) if data else []
         except Exception as e:
             print(f"[Jira] Error fetching board issues: {e}")
             return []
@@ -217,7 +218,7 @@ class JiraService:
         return res
 
     async def search_issues(self, jql: str, max_results: int = 50) -> list[dict]:
-        res = await self._http("GET", f"/rest/api/3/search/jql?jql={jql}&fields=summary,description,status,issuetype,priority,assignee,customfield_10014,parent,comment&maxResults={max_results}")
+        res = await self._http("POST", "/rest/api/3/search/jql", {"jql": jql, "fields": ["summary", "description", "status", "issuetype", "priority", "assignee", "customfield_10014", "parent", "comment"], "maxResults": max_results})
         return res.get("issues", []) if res and isinstance(res, dict) else []
 
     async def fetch_users(self) -> list[dict]:

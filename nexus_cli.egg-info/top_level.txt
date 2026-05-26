@@ -1,7 +1,9 @@
-Confluence Project Plan
+-p
+Nexus terminal guide
 Skills
-calc
+build
 config
 dist
+scratch
 src
-tickets
+vscode-extension

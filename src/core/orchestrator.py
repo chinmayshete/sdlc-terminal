@@ -3,7 +3,7 @@ from __future__ import annotations
 from ..agents.planner_agent import PlannerAgent
 from ..agents.code_agent import CodeAgent
 from ..agents.test_agent import TestAgent
-from ..config.env import env, has_azure_openai_config
+from ..config.env import env, has_llm_config, has_azure_openai_config
 from ..config.paths import paths
 from ..utils.llm import check_ai_health, generate_free_nlp_chat, explain_file_with_chat
 from ..utils.git import push_ticket, get_changed_files
@@ -59,7 +59,8 @@ class Orchestrator:
     async def status(self, mode: str = "command") -> RepoStatus:
         tickets = await self.ticket_service.list_tickets()
         statuses = await self.state_service.get_ticket_statuses(tickets)
-        return RepoStatus(statuses, mode, has_azure_openai_config(), "mock" if env.use_mock else "azure")
+        ai_mode = "mock" if env.use_mock else ("azure" if has_azure_openai_config() else "custom_llm")
+        return RepoStatus(statuses, mode, has_llm_config(), ai_mode)
 
     async def ai_health(self) -> AiHealth: return await check_ai_health()
 
