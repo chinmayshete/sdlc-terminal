@@ -2,7 +2,7 @@
 from pathlib import Path
 import os
 
-root_dir = Path(os.getcwd()).resolve()
+root_dir = Path(__file__).parent.parent.parent.resolve()
 
 paths = {
     "root_dir": root_dir,

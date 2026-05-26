@@ -103,7 +103,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     this._postMessage({ type: 'thinking' });
 
     try {
-      const result = await this.client.chat(message);
+      const result = await this.client.chat(message, this.currentMode);
+      if (result.mode) {
+        this.currentMode = result.mode;
+        this._postMessage({ type: 'modeChanged', mode: result.mode });
+      }
       this._postMessage({
         type: 'chatResponse',
         message: result.message,

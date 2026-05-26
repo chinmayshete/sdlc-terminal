@@ -9,6 +9,13 @@ class GitIntent:
     command: str; args: list[str]; raw: str; source: str
 
 _RULES = [
+    # System commands (must be before more specific rules)
+    (r"^(?:nexus\s+)?help$|^(?:what\s+can\s+you\s+do|list\s+commands)$", "help", []),
+    (r"^(?:nexus\s+)?health$", "health", []),
+    (r"^(?:nexus\s+)?version$", "version", []),
+    (r"^(?:nexus\s+)?doctor$", "doctor", []),
+    (r"^(?:nexus\s+)?config\s+view$", "config-view", []),
+
     # Basic Git
     (r"^(?:nexus\s+)?(?:show|what(?:'s| is)?|check|view)?\s*(?:the\s+)?(?:git\s+)?status$|^what(?:'s| is| has)?\s+changed\??$", "status", []),
     (r"^(?:nexus\s+)?(?:show|view|list)\s+(?:me\s+)?(?:the\s+)?(?:last\s+)?(\d+)\s+commits?$|^(?:nexus\s+)?(?:git\s+)?log(?:\s+(\d+))?$|^history$", "log", None),
@@ -70,7 +77,7 @@ def parse_git_intent(text: str) -> GitIntent:
 async def parse_git_intent_with_llm(text: str) -> GitIntent:
     r = parse_git_intent(text)
     if r.command != "unknown": return r
-    prompt = '''Git command parser. Return JSON: {"command": str, "args": str[]}. If the user input is conversational, feedback, correction, or a general natural language task request rather than a direct Git CLI command, you MUST return {"command": "unknown", "args": []}. Valid: status, log, diff, diff-staged, add, add-all, commit, commit-all, branch-list, branch-create, branch-delete, checkout, pull, push, fetch, stash, stash-pop, stash-list, tag, tag-list, remote, unstage, cherry-pick, blame, show, merge, github-auth, github-clone, github-commit, github-push, github-pull, github-branches, github-pr-create, github-pr-merge, github-issues, github-releases.'''
+    prompt = '''Git command parser. Return JSON: {"command": str, "args": str[]}. If the user input is conversational, feedback, correction, or a general natural language task request rather than a direct Git CLI command, you MUST return {"command": "unknown", "args": []}. Valid: help, health, version, doctor, config-view, status, log, diff, diff-staged, add, add-all, commit, commit-all, branch-list, branch-create, branch-delete, checkout, pull, push, fetch, stash, stash-pop, stash-list, tag, tag-list, remote, unstage, cherry-pick, blame, show, merge, github-auth, github-clone, github-commit, github-push, github-pull, github-branches, github-pr-create, github-pr-merge, github-issues, github-releases.'''
     parsed = await parse_intent_with_llm(text, prompt)
     if parsed: return GitIntent(parsed["command"], parsed["args"], text, "llm")
     return r

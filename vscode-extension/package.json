@@ -27,7 +27,7 @@
   "main": "./dist/extension.js",
   "contributes": {
     "viewsContainers": {
-      "activitybar": [
+      "auxiliarybar": [
         {
           "id": "nexus-sidebar",
           "title": "Nexus SDLC",

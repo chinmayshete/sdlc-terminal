@@ -39,6 +39,7 @@ class AgentLoop:
         self._ensure_system_prompt()
         self.pending_tool: Dict[str, Any] | None = None
         self.pending_tool_id: str | None = None
+        self.current_turn_start_idx: int = 0
 
     def _ensure_system_prompt(self):
         if not self.history or self.history[0].get("role") != "system":
@@ -46,6 +47,7 @@ class AgentLoop:
 
     async def start_turn(self, user_message: str) -> Dict[str, Any]:
         """Starts a new agent turn with the user's prompt."""
+        self.current_turn_start_idx = len(self.history)
         self.history.append({"role": "user", "content": user_message})
         return await self._next_step()
 

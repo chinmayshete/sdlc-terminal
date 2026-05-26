@@ -32,7 +32,8 @@ _RULES = [
 
     # Story
     (r"^(?:nexus\s+)?story\s+create$", "story-create", []),
-    (r"^(?:nexus\s+)?story\s+list$|^(?:list|show)\s+(?:all\s+)?(?:stories|tickets?)", "story-list", []),
+    (r"^(?:nexus\s+)?story\s+list$|^(?:list|show|get|give\s+me\s+(?:a\s+)?list\s+of|what\s+are)\s+(?:all\s+)?(?:stories|tickets?)(?:\s+assigned\s+to\s+me)?$|^stories\s+assigned\s+to\s+me$|^my\s+(?:stories|tickets)$", "story-list", []),
+    (r"^(?:nexus\s+)?tickets$|^(?:list|show|get)\s+tickets$", "tickets", []),
     (r"^(?:nexus\s+)?story\s+view$", "story-view", []),
     (r"^(?:nexus\s+)?story\s+update$", "story-update", []),
     (r"^(?:nexus\s+)?story\s+move$", "story-move", []),

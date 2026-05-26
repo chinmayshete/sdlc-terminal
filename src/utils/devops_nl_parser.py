@@ -9,6 +9,13 @@ class DevOpsIntent:
     command: str; args: list[str]; raw: str; source: str
 
 _RULES = [
+    # System commands (must be before more specific rules)
+    (r"^(?:nexus\s+)?help$|^(?:what\s+can\s+you\s+do|list\s+commands)$", "help", []),
+    (r"^(?:nexus\s+)?status$", "status", []),
+    (r"^(?:nexus\s+)?version$", "version", []),
+    (r"^(?:nexus\s+)?doctor$", "doctor", []),
+    (r"^(?:nexus\s+)?config\s+view$", "config-view", []),
+
     # CI/CD & Jenkins
     (r"^(?:nexus\s+)?cicd$", "cicd", []),
     (r"^(?:nexus\s+)?jenkins\s+auth$", "jenkins-auth", []),
@@ -119,7 +126,7 @@ async def parse_devops_intent_with_llm(text: str) -> DevOpsIntent:
     r = parse_devops_intent(text)
     if r.command != "unknown": return r
     prompt = '''DevOps command parser. Return JSON: {"command": str, "args": str[]}. If the user input is conversational, feedback, correction, or a general natural language task request rather than a direct DevOps CLI command, you MUST return {"command": "unknown", "args": []}.
-    Valid: cicd, jenkins-auth, jenkins-jobs, jenkins-status, jenkins-trigger, jenkins-logs, jenkins-stop, jenkins-validate, jenkins-stages, jenkins-params, actions, actions-validate, pipeline-health, docker-build, docker-run, docker-stop, docker-images, docker-ps, docker-logs, docker-remove, docker-info, docker-stages, docker-validate, k8s-deploy, k8s-pods, k8s-services, k8s-logs, k8s-scale, k8s-restart, k8s-delete, monitor-status, monitor-logs, monitor-metrics, monitor-alerts, monitor-health, deploy-start, deploy-rollback, deploy-status, deploy-history, deploy-check, release-create, release-deploy, release-notes, release-rollback, release-history, release, hotfix, terraform-info, infra-resources, env-show, env-compare, env-validate, deps-audit, deps-check, deps-licenses, scan, scan-errors, secrets-check, summary, health, changed, pr-check, merge, rollback, push.'''
+    Valid: help, status, version, doctor, config-view, cicd, jenkins-auth, jenkins-jobs, jenkins-status, jenkins-trigger, jenkins-logs, jenkins-stop, jenkins-validate, jenkins-stages, jenkins-params, actions, actions-validate, pipeline-health, docker-build, docker-run, docker-stop, docker-images, docker-ps, docker-logs, docker-remove, docker-info, docker-stages, docker-validate, k8s-deploy, k8s-pods, k8s-services, k8s-logs, k8s-scale, k8s-restart, k8s-delete, monitor-status, monitor-logs, monitor-metrics, monitor-alerts, monitor-health, deploy-start, deploy-rollback, deploy-status, deploy-history, deploy-check, release-create, release-deploy, release-notes, release-rollback, release-history, release, hotfix, terraform-info, infra-resources, env-show, env-compare, env-validate, deps-audit, deps-check, deps-licenses, scan, scan-errors, secrets-check, summary, health, changed, pr-check, merge, rollback, push.'''
     parsed = await parse_intent_with_llm(text, prompt)
     if parsed: return DevOpsIntent(parsed["command"], parsed["args"], text, "llm")
     return r

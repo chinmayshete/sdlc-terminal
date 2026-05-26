@@ -9,6 +9,7 @@ from typing import Optional
 class ChatRequest(BaseModel):
     """Free NLP chat request — same as typing at the nexus > prompt."""
     message: str
+    mode: str = "command"
     history: list[ChatTurnModel] = Field(default_factory=list)
 
 class ChatTurnModel(BaseModel):
@@ -56,6 +57,7 @@ class ChatResponse(BaseModel):
     message: str
     changes: list[FileChangeModel] = Field(default_factory=list)
     commands: list[str] = Field(default_factory=list)
+    mode: Optional[str] = None
 
 class FileChangeModel(BaseModel):
     path: str

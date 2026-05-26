@@ -161,20 +161,36 @@ async def pm_story_create(summary: str, desc: str = "") -> list[str]:
         return [f"[bold green]✓ Story created successfully in Jira![/]", f"[cyan]Key[/]: {k}", f"[cyan]Summary[/]: {summary}"]
     return [f"[bold green]✓ Story created locally[/]: '{summary}'", "[cyan]Key[/]: SDLC-" + str(random.randint(300, 999))]
 
-async def pm_story_list() -> list[str]:
+async def pm_story_list(assignee: str = None) -> list[str]:
     jira = JiraService()
-    ts = await jira.fetch_issues_by_type("Story")
+    if assignee == "me":
+        myself = await jira.fetch_myself()
+        if myself and myself.get("accountId"):
+            jql = f'project="{env.jira_project_key}" AND issuetype="Story" AND assignee="{myself.get("accountId")}" ORDER BY created DESC'
+        elif env.jira_email:
+            jql = f'project="{env.jira_project_key}" AND issuetype="Story" AND assignee="{env.jira_email}" ORDER BY created DESC'
+        else:
+            jql = f'project="{env.jira_project_key}" AND issuetype="Story" ORDER BY created DESC'
+        title = "Jira Stories Assigned to Me"
+    else:
+        jql = f'project="{env.jira_project_key}" AND issuetype="Story" ORDER BY created DESC'
+        title = "Jira Stories"
+
+    ts = await jira.search_issues(jql)
     # Strict client-side guard: only include issuetype == Story (never Epics, Tasks, Bugs)
     stories = [t for t in ts if t.get("fields", {}).get("issuetype", {}).get("name", "").lower() == "story"]
     if stories:
-        res = ["[bold cyan]Jira Stories[/]:", ""]
+        res = [f"[bold cyan]{title}[/]:", ""]
         for t in stories:
             st = t.get('fields', {}).get('status', {}).get('name', 'To Do')
             scolor = "bold green" if st.lower() in ["done", "completed"] else "bold yellow" if st.lower() == "in progress" else "bold cyan"
             res.append(f"  • [[bold cyan]{t.get('key')}[/]] [bold white]{t.get('fields', {}).get('summary', '')}[/] — ([{scolor}]{st}[/])")
         return res
+    
+    if assignee == "me":
+        return [f"[bold yellow]⚠ No Stories assigned to you found in project '{env.jira_project_key}'.[/]"]
     return [
-        "[bold yellow]⚠ No Stories found in Jira. Use 'story create <summary>' to create one.[/]"
+        f"[bold yellow]⚠ No Stories found in project '{env.jira_project_key}'. Use 'story create <summary>' to create one.[/]"
     ]
 
 async def pm_story_view(story_id: str) -> list[str]:
@@ -248,18 +264,34 @@ async def pm_task_complete(task_id: str) -> list[str]:
 async def pm_task_delete(task_id: str) -> list[str]:
     return [f"[bold red]✓ Task {task_id} deleted.[/]"]
 
-async def pm_task_list() -> list[str]:
+async def pm_task_list(assignee: str = None) -> list[str]:
     jira = JiraService()
-    ts = await jira.fetch_issues_by_type("Task")
+    if assignee == "me":
+        myself = await jira.fetch_myself()
+        if myself and myself.get("accountId"):
+            jql = f'project="{env.jira_project_key}" AND issuetype="Task" AND assignee="{myself.get("accountId")}" ORDER BY created DESC'
+        elif env.jira_email:
+            jql = f'project="{env.jira_project_key}" AND issuetype="Task" AND assignee="{env.jira_email}" ORDER BY created DESC'
+        else:
+            jql = f'project="{env.jira_project_key}" AND issuetype="Task" ORDER BY created DESC'
+        title = "Jira Tasks Assigned to Me"
+    else:
+        jql = f'project="{env.jira_project_key}" AND issuetype="Task" ORDER BY created DESC'
+        title = "Jira Tasks"
+
+    ts = await jira.search_issues(jql)
     # Strict client-side guard: only include issuetype == Task
     tasks = [t for t in ts if t.get("fields", {}).get("issuetype", {}).get("name", "").lower() == "task"]
     if tasks:
-        res = ["[bold cyan]Jira Tasks[/]:", ""]
+        res = [f"[bold cyan]{title}[/]:", ""]
         for t in tasks:
             st = t.get('fields', {}).get('status', {}).get('name', 'To Do')
             scolor = "bold green" if st.lower() in ["done", "completed"] else "bold yellow" if st.lower() == "in progress" else "bold cyan"
             res.append(f"  • [[bold cyan]{t.get('key')}[/]] [bold white]{t.get('fields', {}).get('summary', '')}[/] — ([{scolor}]{st}[/])")
         return res
+    
+    if assignee == "me":
+        return [f"[bold yellow]⚠ No Tasks assigned to you found in project '{env.jira_project_key}'.[/]"]
     return [
         "[bold cyan]Sprint Tasks[/]:",
         "  • [[bold cyan]SDLC-301[/]] Write Unit Tests for Jira API Wrapper — ([bold green]Complete[/])",

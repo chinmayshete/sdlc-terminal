@@ -2,6 +2,7 @@ export interface ChatResponse {
     message: string;
     changes: FileChange[];
     commands: string[];
+    mode?: string;
 }
 export interface FileChange {
     path: string;
@@ -82,7 +83,7 @@ export declare class NexusClient {
     /** Get available modes. */
     getModes(): Promise<ModesResponse>;
     /** Send a free NLP chat message. */
-    chat(message: string, history?: {
+    chat(message: string, mode?: string, history?: {
         role: string;
         content: string;
     }[]): Promise<ChatResponse>;

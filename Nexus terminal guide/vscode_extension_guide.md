@@ -100,4 +100,4 @@ Once you have the `nexus-sdlc-0.1.0.vsix` file:
 4. Select **Install from VSIX...**
 5. Choose your generated file and reload the window.
 
-If you are actively developing, you can also press **F5** in VS Code to launch an "Extension Development Host"—a separate VS Code window that runs your live code without needing to build a `.vsix` file every time.
+If you are actively developing, you can also press **F5** in VS Code to launch an "Extension Development Host"a separate VS Code window that runs your live code without needing to build a `.vsix` file every time.

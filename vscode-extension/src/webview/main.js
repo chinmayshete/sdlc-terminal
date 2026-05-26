@@ -145,6 +145,10 @@
 
       case 'response':
         addAssistantMessage(data.message, data.changes, false);
+        if (data.mode) {
+          switchMode(data.mode);
+          vscode.postMessage({ type: 'switchMode', mode: data.mode });
+        }
         break;
 
       case 'clarification':
@@ -175,7 +179,7 @@
     chatInput.style.height = 'auto';
 
     if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'chat', message }));
+      ws.send(JSON.stringify({ type: 'chat', message, mode: currentMode }));
     } else {
       addAssistantMessage('✗ Not connected to Nexus Agent server. Please start the server and try again.', null, true);
     }

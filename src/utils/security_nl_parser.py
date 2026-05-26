@@ -9,6 +9,13 @@ class SecurityIntent:
     command: str; args: list[str]; raw: str; source: str
 
 _RULES = [
+    # System commands (must be before more specific rules)
+    (r"^(?:nexus\s+)?help$|^(?:what\s+can\s+you\s+do|list\s+commands)$", "help"),
+    (r"^(?:nexus\s+)?health$", "health"),
+    (r"^(?:nexus\s+)?version$", "version"),
+    (r"^(?:nexus\s+)?doctor$", "doctor"),
+    (r"^(?:nexus\s+)?config\s+view$", "config-view"),
+
     # Core Scan & Aliases
     (r"^(?:nexus\s+)?(?:security\s+)?scan$", "scan"),
     (r"^(?:nexus\s+)?(?:security\s+)?sast$", "sast"),
@@ -50,7 +57,7 @@ async def parse_security_intent_with_llm(text: str) -> SecurityIntent:
     r = parse_security_intent(text)
     if r.command != "unknown": return r
     prompt = '''Security command parser. Return JSON: {"command": str, "args": str[]}. If the user input is conversational, feedback, correction, or a general natural language task request rather than a direct Security CLI command, you MUST return {"command": "unknown", "args": []}.
-    Valid: scan, sast, dast, dependencies, secrets, report, scan-errors, scan-warnings, scan-summary, scan-history, scan-file, status, rules, env-audit, deps-audit, licenses, vault, compliance, gitflow, codeowners, docker-security, terraform-security, dashboard, posture.'''
+    Valid: help, health, version, doctor, config-view, scan, sast, dast, dependencies, secrets, report, scan-errors, scan-warnings, scan-summary, scan-history, scan-file, status, rules, env-audit, deps-audit, licenses, vault, compliance, gitflow, codeowners, docker-security, terraform-security, dashboard, posture.'''
     parsed = await parse_intent_with_llm(text, prompt)
     if parsed: return SecurityIntent(parsed["command"], parsed["args"], text, "llm")
     return r

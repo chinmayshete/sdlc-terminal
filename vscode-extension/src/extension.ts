@@ -67,3 +67,4 @@ export function deactivate(): void {
   console.log('Nexus SDLC extension deactivating...');
   serverManager?.dispose();
 }
+

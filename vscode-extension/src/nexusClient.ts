@@ -10,6 +10,7 @@ export interface ChatResponse {
   message: string;
   changes: FileChange[];
   commands: string[];
+  mode?: string;
 }
 
 export interface FileChange {
@@ -147,9 +148,10 @@ export class NexusClient {
   /** Send a free NLP chat message. */
   async chat(
     message: string,
+    mode: string = 'command',
     history: { role: string; content: string }[] = []
   ): Promise<ChatResponse> {
-    return this._post<ChatResponse>('/api/chat', { message, history });
+    return this._post<ChatResponse>('/api/chat', { message, mode, history });
   }
 
   // ── Commands ────────────────────────────────────────────
