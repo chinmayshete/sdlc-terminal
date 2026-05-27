@@ -333,15 +333,28 @@
     const div = document.createElement('div');
     div.className = 'output-panel';
 
-    let bodyHtml = '';
-    for (const line of output) {
-      bodyHtml += `<div class="output-line">${formatRichText(line)}</div>`;
+    // Detect if output is a list of Jira-style items:
+    // e.g. "• [SCRUM-16] Title — (Status)"
+    const isJiraList = output && output.length > 0 &&
+      output.some(l => /[•*]\s*\[([A-Z]+-\d+)\]/.test(l) || /•\s+\[?[A-Z]+-\d+/.test(l));
+
+    // Detect if output looks like a structured list of bullet items
+    const isBulletList = !isJiraList && output && output.length > 1 &&
+      output.filter(l => /^[•*▪▸→\-]\s+/.test(l.trim())).length >= Math.ceil(output.length * 0.4);
+
+    if (isJiraList || isBulletList) {
+      div.innerHTML = renderRichPanel(title, output);
+    } else {
+      let bodyHtml = '';
+      for (const line of output) {
+        bodyHtml += `<div class="output-line">${formatRichText(line)}</div>`;
+      }
+      div.innerHTML = `
+        <div class="output-panel-header">${escapeHtml(title)}</div>
+        <div class="output-panel-body">${bodyHtml}</div>
+      `;
     }
 
-    div.innerHTML = `
-      <div class="output-panel-header">${escapeHtml(title)}</div>
-      <div class="output-panel-body">${bodyHtml}</div>
-    `;
     chatContainer.appendChild(div);
     scrollToBottom();
   }
@@ -451,6 +464,60 @@
   }
 
   /**
+   * Render a rich terminal-style boxed panel.
+   * Detects Jira ticket lines (e.g. "• [SCRUM-16] Title — (Status)")
+   * and generic bullet lists, rendering them with proper styling.
+   */
+  function renderRichPanel(title, lines) {
+    // Filter empty lines from top/bottom
+    const nonEmpty = lines.filter(l => l.trim() !== '');
+    if (nonEmpty.length === 0) {
+      return `<div class="rich-panel">
+        <div class="rich-panel-title">${escapeHtml(title)}</div>
+        <div class="rich-panel-empty">No results found.</div>
+      </div>`;
+    }
+
+    // Try to match Jira-style: • [TICKET-ID] Title — (Status)
+    const jiraPattern = /[•*]?\s*\[?([A-Z]+-\d+)\]?\s+(.+?)(?:\s+[—–-]+\s+\((.+?)\))?\s*$/;
+    let itemsHtml = '';
+
+    for (const line of nonEmpty) {
+      const jiraMatch = line.match(jiraPattern);
+      if (jiraMatch) {
+        const [, ticketId, summary, status] = jiraMatch;
+        const statusKey = (status || '').toLowerCase();
+        let statusClass = 'todo';
+        if (/in.prog|in.dev|progress|started|doing/i.test(statusKey)) statusClass = 'in-progress';
+        else if (/done|closed|resolved|complete|finish/i.test(statusKey)) statusClass = 'done';
+
+        itemsHtml += `
+          <div class="rich-panel-item">
+            <span class="rich-panel-item-bullet">•</span>
+            <span class="rich-panel-item-id">${escapeHtml(ticketId)}</span>
+            <span class="rich-panel-item-text">${formatRichText(summary.trim())}</span>
+            ${status ? `<span class="rich-panel-item-status ${statusClass}">${escapeHtml(status.trim())}</span>` : ''}
+          </div>`;
+      } else {
+        // Generic line — strip leading bullet if present, render as item
+        const stripped = line.replace(/^[•*▪▸→\-]\s+/, '').trim();
+        if (stripped) {
+          itemsHtml += `
+            <div class="rich-panel-item">
+              <span class="rich-panel-item-bullet">•</span>
+              <span class="rich-panel-item-text">${formatRichText(stripped)}</span>
+            </div>`;
+        }
+      }
+    }
+
+    return `<div class="rich-panel">
+      <div class="rich-panel-title">${escapeHtml(title)}</div>
+      <div class="rich-panel-body">${itemsHtml}</div>
+    </div>`;
+  }
+
+  /**
    * Convert Rich markup (e.g. [bold green]text[/]) to simple HTML.
    * This is a lightweight converter — it handles the most common Rich tags.
    */
@@ -473,6 +540,16 @@
     // [green]...[/] etc.
     html = html.replace(/\[(green|red|yellow|blue|cyan|magenta|white)\](.*?)\[\/\]/g,
       (_, color, content) => `<span class="text-${color}">${content}</span>`);
+
+    // ✓ / ✗ icons
+    html = html.replace(/✓/g, '<span class="text-green">✓</span>');
+    html = html.replace(/✗/g, '<span class="text-red">✗</span>');
+
+    // Bold **text**
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
+    // Inline code `text`
+    html = html.replace(/`([^`]+)`/g, '<code style="background:rgba(0,255,136,0.08);padding:1px 4px;border-radius:3px;font-family:var(--font-mono);font-size:11px;">$1</code>');
 
     // Clean up any remaining [bold dodger_blue2] style tags
     html = html.replace(/\[(?:bold\s+)?[a-z_0-9]+\]/g, '');

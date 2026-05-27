@@ -5,9 +5,9 @@ from functools import lru_cache
 from dotenv import load_dotenv
 from pathlib import Path
 
-load_dotenv()
+load_dotenv(override=True)
 try:
-    load_dotenv(dotenv_path=Path.home() / ".nexus_env")
+    load_dotenv(dotenv_path=Path.home() / ".nexus_env", override=True)
 except Exception:
     pass
 if os.getenv("SDLC_SKIP_SSL_VERIFY", "").strip().lower() == "true":

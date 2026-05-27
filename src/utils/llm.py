@@ -264,6 +264,73 @@ async def check_ai_health() -> AiHealth:
     except Exception as e:
         return AiHealth(configured=True, mode=mode, reachable=False, message=str(e))
 
+# ── Mode-aware NLP Fallback Chat ─────────────────────────────
+_MODE_SYSTEM_PROMPTS: dict[str, str] = {
+    "git": (
+        "You are a Git expert assistant embedded inside the Nexus SDLC tool. "
+        "The user is in Git mode. Answer questions about version control, branching strategies, "
+        "commit history, merging, rebasing, GitHub, code reviews, and any git-related topic. "
+        "Be concise and practical. Return JSON: {\"message\": str}."
+    ),
+    "security": (
+        "You are a security expert assistant embedded inside the Nexus SDLC tool. "
+        "The user is in Security mode. Answer questions about SAST, DAST, vulnerability scanning, "
+        "secrets detection, dependency audits, compliance, OWASP, secure coding, and threat modeling. "
+        "Be concise, actionable, and refer to the user's project context where relevant. "
+        "Return JSON: {\"message\": str}."
+    ),
+    "agile": (
+        "You are an Agile / Project Management expert embedded inside the Nexus SDLC tool. "
+        "The user is in Agile mode. Answer questions about Jira, sprints, backlog grooming, "
+        "story writing, acceptance criteria, epics, velocity, burndown charts, retros, "
+        "and general agile/scrum best practices. "
+        "Be concise and practical. Return JSON: {\"message\": str}."
+    ),
+    "devops": (
+        "You are a DevOps expert assistant embedded inside the Nexus SDLC tool. "
+        "The user is in DevOps mode. Answer questions about CI/CD pipelines, Docker, Kubernetes, "
+        "Terraform, infrastructure as code, monitoring, deployments, and cloud operations. "
+        "Be concise and actionable. Return JSON: {\"message\": str}."
+    ),
+}
+
+async def run_mode_nlp_chat(raw: str, mode: str, kb_context: str = "") -> str:
+    """Run a focused NLP chat for a specific mode (git/security/agile/devops).
+
+    Used as a fallback when a user's input doesn't match any known CLI command.
+    Returns a plain-text response string.
+    """
+    if not _use_llm():
+        return (
+            f"I understand you asked: \"{raw}\". "
+            f"For full AI responses in {mode} mode, please configure an LLM in your .env file."
+        )
+
+    sys_prompt = _MODE_SYSTEM_PROMPTS.get(
+        mode,
+        "You are Nexus, an SDLC AI assistant. Return JSON: {\"message\": str}."
+    )
+
+    # Prepend KB context if available
+    if kb_context:
+        sys_prompt = (
+            f"{sys_prompt}\n\n"
+            f"[Knowledge Base Context — use this to inform your answers]\n{kb_context[:4000]}"
+        )
+
+    try:
+        r = await _call_llm_json(
+            [
+                {"role": "system", "content": sys_prompt},
+                {"role": "user", "content": raw},
+            ],
+            temperature=0.4,
+        )
+        return r.get("message", "I processed your request, but got an empty response.").strip()
+    except Exception as e:
+        return f"AI response error: {e}"
+
+
 # ── Intent parsing helper (used by all NL parsers) ───────────
 async def parse_intent_with_llm(input_text: str, system_prompt: str) -> dict[str, Any] | None:
     if not _use_llm(): return None

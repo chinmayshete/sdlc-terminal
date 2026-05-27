@@ -711,3 +711,126 @@ body {
   opacity: 0.6;
   pointer-events: none;
 }
+
+/* ── Rich Terminal Panel ──────────────────────────────────── */
+/* Mimics the Rich library's boxed panel output from the terminal */
+.rich-panel {
+  background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-secondary));
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  animation: fadeInUp 0.3s ease-out;
+  margin: 4px 0;
+}
+
+.rich-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  background: rgba(0, 0, 0, 0.25);
+  border-bottom: 1px solid var(--border-primary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.rich-panel-title::before {
+  content: '┌─';
+  opacity: 0.5;
+  font-size: 10px;
+}
+
+.rich-panel-body {
+  padding: 8px 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.rich-panel-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 2px 0;
+  color: var(--text-primary);
+  border-bottom: 1px solid rgba(48, 54, 61, 0.4);
+}
+
+.rich-panel-item:last-child {
+  border-bottom: none;
+}
+
+.rich-panel-item-bullet {
+  color: var(--accent);
+  flex-shrink: 0;
+  font-size: 13px;
+}
+
+.rich-panel-item-id {
+  font-family: var(--font-mono);
+  color: var(--agile-blue);
+  font-weight: 600;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.rich-panel-item-text {
+  flex: 1;
+  color: var(--text-primary);
+}
+
+.rich-panel-item-status {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.rich-panel-item-status.todo {
+  background: rgba(100, 100, 100, 0.2);
+  color: var(--text-secondary);
+  border: 1px solid rgba(100, 100, 100, 0.3);
+}
+
+.rich-panel-item-status.in-progress {
+  background: rgba(255, 204, 0, 0.12);
+  color: var(--devops-yellow);
+  border: 1px solid rgba(255, 204, 0, 0.3);
+}
+
+.rich-panel-item-status.done {
+  background: rgba(0, 255, 136, 0.1);
+  color: var(--nexus-green);
+  border: 1px solid rgba(0, 255, 136, 0.25);
+}
+
+.rich-panel-footer {
+  padding: 4px 12px 7px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  border-top: 1px solid rgba(48, 54, 61, 0.5);
+}
+
+/* ── Warning / Empty State Banner ────────────────────────────  */
+.rich-panel-empty {
+  padding: 10px 14px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--devops-yellow);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rich-panel-empty::before {
+  content: '⚠';
+}

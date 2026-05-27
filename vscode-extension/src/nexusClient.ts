@@ -175,6 +175,14 @@ export class NexusClient {
     mode: string = 'command',
     history: { role: string; content: string }[] = []
   ): Promise<ChatResponse> {
+    const cwd = this._getCurrentCwd();
+    if (cwd) {
+      try {
+        await this.updateCwd(cwd);
+      } catch (err) {
+        console.warn(`[NexusClient] Failed to auto-sync CWD before chat: ${err}`);
+      }
+    }
     return this._post<ChatResponse>('/api/chat', { message, mode, history });
   }
 
@@ -182,6 +190,14 @@ export class NexusClient {
 
   /** Execute a command in a specific mode. */
   async executeCommand(input: string, mode: string = 'command'): Promise<CommandResponse> {
+    const cwd = this._getCurrentCwd();
+    if (cwd) {
+      try {
+        await this.updateCwd(cwd);
+      } catch (err) {
+        console.warn(`[NexusClient] Failed to auto-sync CWD before command: ${err}`);
+      }
+    }
     return this._post<CommandResponse>('/api/command', { input, mode });
   }
 

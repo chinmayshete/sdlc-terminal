@@ -49,7 +49,7 @@ def read_file_tool(path: str) -> dict:
     """Reads the contents of a file in the workspace."""
     try:
         full_path = (paths["root_dir"] / path).resolve()
-        if not str(full_path).startswith(str(paths["root_dir"])):
+        if not str(full_path).lower().startswith(str(paths["root_dir"]).lower()):
             return {"success": False, "error": "Access denied: outside workspace"}
         if not full_path.exists():
             return {"success": False, "error": "File not found"}
@@ -64,7 +64,7 @@ def edit_file_tool(path: str, content: str, action: str = "update") -> dict:
     """Modifies a file in the workspace (create, update, or delete)."""
     try:
         full_path = (paths["root_dir"] / path).resolve()
-        if not str(full_path).startswith(str(paths["root_dir"])):
+        if not str(full_path).lower().startswith(str(paths["root_dir"]).lower()):
             return {"success": False, "error": "Access denied: outside workspace"}
         
         if action == "delete":
@@ -86,7 +86,7 @@ def list_dir_tool(path: str = ".") -> dict:
     """Lists files and directories in a workspace folder."""
     try:
         full_path = (paths["root_dir"] / path).resolve()
-        if not str(full_path).startswith(str(paths["root_dir"])):
+        if not str(full_path).lower().startswith(str(paths["root_dir"]).lower()):
             return {"success": False, "error": "Access denied: outside workspace"}
         if not full_path.exists():
             return {"success": False, "error": "Directory not found"}

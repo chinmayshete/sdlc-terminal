@@ -54,6 +54,36 @@ class Orchestrator:
         test_changes = await self.tester.run(ticket, code_changes)
         self._write_changes(test_changes)
         await self.state_service.set_ticket_status(ticket.id, "IN_DEVELOPMENT", "Code and tests generated.")
+        
+        # Transition remote Jira issue to "In Progress" or equivalent
+        if not env.use_mock:
+            try:
+                jira = JiraService()
+                if jira._configured():
+                    transitions = await jira.fetch_transitions(ticket.id)
+                    target = None
+                    # Search priority:
+                    # 1. Exact match on target status name (case-insensitive) for "in progress" or "in development"
+                    # 2. Substring match on target status name or transition name containing "progress" or "development"
+                    for t in transitions:
+                        to_status = t.get("to", {}).get("name", "").lower()
+                        if to_status in ("in progress", "in development"):
+                            target = t
+                            break
+                    if not target:
+                        for t in transitions:
+                            to_status = t.get("to", {}).get("name", "").lower()
+                            trans_name = t.get("name", "").lower()
+                            if "progress" in to_status or "development" in to_status or "progress" in trans_name or "development" in trans_name:
+                                target = t
+                                break
+                    
+                    if target:
+                        await jira.execute_transition(ticket.id, target["id"])
+            except Exception as e:
+                # Log transition error but do not fail the core execute command
+                print(f"[Orchestrator] Error transitioning Jira ticket {ticket.id}: {e}")
+
         return ExecuteResult([c.path for c in code_changes], [c.path for c in test_changes], "IN_DEVELOPMENT")
 
     async def status(self, mode: str = "command") -> RepoStatus:

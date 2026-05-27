@@ -60,7 +60,14 @@ export class ServerManager {
     const port = config.get<number>('serverPort', 9500);
 
     // Get workspace folder
-    const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    let workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    const activeEditor = vscode.window.activeTextEditor;
+    if (activeEditor && activeEditor.document.uri.scheme === 'file') {
+      const activeFolder = vscode.workspace.getWorkspaceFolder(activeEditor.document.uri);
+      if (activeFolder) {
+        workspaceFolder = activeFolder.uri.fsPath;
+      }
+    }
     if (!workspaceFolder) {
       vscode.window.showErrorMessage('Nexus: No workspace folder open.');
       return false;

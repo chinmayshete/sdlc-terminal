@@ -89,6 +89,24 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     })
   );
 
+  // Sync initial CWD on activation
+  const initialFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (initialFolder) {
+    const activeEditor = vscode.window.activeTextEditor;
+    const activeFolder = activeEditor && activeEditor.document.uri.scheme === 'file'
+      ? vscode.workspace.getWorkspaceFolder(activeEditor.document.uri)?.uri.fsPath
+      : null;
+    const startCwd = activeFolder || initialFolder;
+    setTimeout(async () => {
+      try {
+        await serverManager.updateRuntimeCwd(startCwd);
+        console.log(`[Nexus] Initialized active workspace CWD: ${startCwd}`);
+      } catch (err) {
+        console.error(`[Nexus] Failed to sync startup CWD: ${err}`);
+      }
+    }, 3000);
+  }
+
 }
 
 export function deactivate(): void {

@@ -36,6 +36,8 @@ from ..utils.git_nl_parser import parse_git_intent_with_llm, get_git_command_hel
 from ..utils.security_nl_parser import parse_security_intent_with_llm, get_security_command_help
 from ..utils.devops_nl_parser import parse_devops_intent_with_llm, get_devops_command_help
 from ..utils.agile_nl_parser import parse_agile_intent_with_llm, get_agile_command_help
+from ..utils.llm import run_mode_nlp_chat
+from ..utils.kb_loader import get_kb_for_mode
 from ..utils import git_operations as gitops
 from ..utils import devops_operations as devops
 from ..utils import security_operations as secops
@@ -105,7 +107,11 @@ def _safe_list(val: Any) -> list[str]:
     return [str(val)]
 
 async def _try_execute_mode_command(o: Orchestrator, raw: str, mode: str) -> CommandResponse | None:
-    """Parses intent for active mode and runs it if the command is recognized."""
+    """Parses intent for active mode and runs it if the command is recognized.
+    
+    For recognized commands, runs the structured handler.
+    For unrecognized natural language in git/security/agile/devops, delegates to NLP fallback.
+    """
     cleaned = raw.strip().lower()
 
     # Intercept exit/quit in non-command modes to return to command mode
@@ -124,19 +130,37 @@ async def _try_execute_mode_command(o: Orchestrator, raw: str, mode: str) -> Com
         intent = await parse_git_intent_with_llm(raw)
         if intent.command != "unknown":
             return await _exec_git_mode(o, raw, intent)
+        # NLP fallback for natural language git questions
+        return await _mode_nlp_fallback(raw, mode)
     elif mode == "security":
         intent = await parse_security_intent_with_llm(raw)
         if intent.command != "unknown":
             return await _exec_security_mode(o, raw, intent)
+        # NLP fallback for natural language security questions
+        return await _mode_nlp_fallback(raw, mode)
     elif mode == "devops":
         intent = await parse_devops_intent_with_llm(raw)
         if intent.command != "unknown":
             return await _exec_devops_mode(o, raw, intent)
+        # NLP fallback for natural language devops questions
+        return await _mode_nlp_fallback(raw, mode)
     elif mode == "agile":
         intent = await parse_agile_intent_with_llm(raw)
         if intent.command != "unknown":
             return await _exec_agile_mode(o, raw, intent)
+        # NLP fallback for natural language agile questions (with project KB)
+        return await _mode_nlp_fallback(raw, mode)
     return None
+
+
+async def _mode_nlp_fallback(raw: str, mode: str) -> CommandResponse:
+    """Handle unrecognized natural language input using mode-specific LLM fallback.
+    
+    Injects Skills KB (and Confluence KB for agile mode) into the prompt.
+    """
+    kb_context = get_kb_for_mode(mode, paths)
+    message = await run_mode_nlp_chat(raw, mode, kb_context)
+    return CommandResponse(title=f"{mode.title()} AI", output=[message])
 
 # ── Root ─────────────────────────────────────────────────────
 @app.get("/", response_model=ServerInfo)
@@ -649,7 +673,8 @@ async def _exec_git_mode(o: Orchestrator, raw: str, intent: Any = None) -> Comma
     }
     fn = handlers.get(c)
     if not fn:
-        return CommandResponse(title="Git", output=[f"Unknown git command: {c}"])
+        # NLP fallback for unrecognized git commands
+        return await _mode_nlp_fallback(raw, "git")
     r = fn() if callable(fn) else fn
     if asyncio.iscoroutine(r):
         r = await r
@@ -696,7 +721,8 @@ async def _exec_security_mode(o: Orchestrator, raw: str, intent: Any = None) -> 
     }
     fn = handlers.get(c)
     if not fn:
-        return CommandResponse(title="Security", output=[f"Unknown security command: {c}"])
+        # NLP fallback for unrecognized security commands
+        return await _mode_nlp_fallback(raw, "security")
     r = fn() if callable(fn) else fn
     if asyncio.iscoroutine(r):
         r = await r
@@ -878,7 +904,8 @@ async def _exec_agile_mode(o: Orchestrator, raw: str, intent: Any = None) -> Com
         func_name = "pm_" + c.replace("-", "_")
         fn = getattr(pmops, func_name, None)
         if not fn:
-            return CommandResponse(title="Agile", output=[f"Unknown agile command: {c}"])
+            # NLP fallback for unrecognized agile commands (with Confluence/Skills KB)
+            return await _mode_nlp_fallback(raw, "agile")
 
         if c in ("story-list", "task-list"):
             r = fn(assignee="me" if is_me else None)

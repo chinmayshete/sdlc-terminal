@@ -45,12 +45,40 @@ class AgentLoop:
         if not self.history or self.history[0].get("role") != "system":
             import os
             from ..config.paths import paths
+            from ..utils.kb_loader import load_skills_kb
+
             sys_info = (
                 f"\n\n[System Information]\n"
                 f"Operating System: {'Windows' if os.name == 'nt' else 'Unix/Linux'}\n"
                 f"Workspace Root Directory: {paths['root_dir']}\n"
             )
-            self.history.insert(0, {"role": "system", "content": SYSTEM_PROMPT + sys_info})
+
+            # Inject Skills KB as knowledge base context
+            skills_dir = paths.get("skills_dir")
+            # Also check the root-level Skills folder (capital S)
+            if not skills_dir or not skills_dir.exists():
+                root = paths.get("root_dir")
+                if root:
+                    for candidate in ("Skills", "skills", "knowledge_base", "kb"):
+                        candidate_dir = root / candidate
+                        if candidate_dir.exists() and candidate_dir.is_dir():
+                            skills_dir = candidate_dir
+                            break
+
+            kb_section = ""
+            if skills_dir and skills_dir.exists():
+                kb_content = load_skills_kb(skills_dir)
+                if kb_content:
+                    kb_section = (
+                        "\n\n[Skills Knowledge Base — follow these standards when generating code]\n"
+                        + kb_content
+                    )
+
+            self.history.insert(0, {
+                "role": "system",
+                "content": SYSTEM_PROMPT + sys_info + kb_section,
+            })
+
 
     async def start_turn(self, user_message: str) -> Dict[str, Any]:
         """Starts a new agent turn with the user's prompt."""
