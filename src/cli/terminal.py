@@ -1126,22 +1126,83 @@ async def _handle_git(o: Orchestrator, raw: str, session: PromptSession, nlp: Nl
         res, _, _ = await _handle_command(o, raw, session, nlp)
         return res
     handlers = {
-        "status": gitops.git_status, "log": lambda: gitops.git_log(int(a[0]) if a else 10),
-        "diff": lambda: gitops.git_diff(a[0] if a else None), "diff-staged": gitops.git_diff_staged,
-        "add": lambda: gitops.git_add(a[0]) if a else gitops.git_add_all(), "add-all": gitops.git_add_all,
+        # ── Status & Info ──
+        "status": gitops.git_status,
+        "log": lambda: gitops.git_log(int(a[0]) if a else 10),
+        "diff": lambda: gitops.git_diff(a[0] if a else None),
+        "diff-staged": gitops.git_diff_staged,
+        "show": lambda: gitops.git_show_commit(a[0]) if a else [" Usage: show <sha>"],
+        "blame": lambda: gitops.git_blame(a[0]) if a else ["Usage: blame <file>"],
+        "shortlog": gitops.git_shortlog,
+        # ── Staging ──
+        "add": lambda: gitops.git_add(a[0]) if a else gitops.git_add_all(),
+        "add-all": gitops.git_add_all,
+        "unstage": lambda: gitops.git_unstage(a[0]) if a else "Usage: unstage <file>",
+        # ── Committing ──
         "commit": lambda: gitops.git_commit(a[0]) if a else "Usage: commit <message>",
-        "commit-all": lambda: gitops.git_commit_all(a[0]) if a else "Usage: commit -a <message>",
-        "branch-list": gitops.git_list_branches, "branch-create": lambda: gitops.git_create_branch(a[0]) if a else "Usage: branch <name>",
-        "checkout": lambda: gitops.git_checkout(a[0]) if a else "Usage: checkout <name>",
+        "commit-all": lambda: gitops.git_commit_all(a[0]) if a else "Usage: commit all <message>",
+        "revert": lambda: gitops.git_revert(a[0]) if a else "Usage: revert <sha>",
+        # ── Reset ──
+        "reset-soft": lambda: gitops.git_reset_soft(a[0] if a else "HEAD~1"),
+        "reset-mixed": lambda: gitops.git_reset_mixed(a[0] if a else "HEAD~1"),
+        "reset-hard": lambda: gitops.git_reset_hard(a[0] if a else "HEAD~1"),
+        "clean": gitops.git_clean,
+        "clean-dry-run": gitops.git_clean_dry_run,
+        # ── Branching ──
+        "branch-list": gitops.git_list_branches,
+        "branch-create": lambda: gitops.git_create_branch(a[0]) if a else "Usage: branch <name>",
+        "checkout": lambda: gitops.git_checkout(a[0]) if a else "Usage: switch <name>",
         "branch-delete": lambda: gitops.git_delete_branch(a[0]) if a else "Usage: delete branch <name>",
-        "pull": gitops.git_pull, "push": lambda: gitops.git_push(a[0] if a else None), "fetch": gitops.git_fetch,
-        "stash": gitops.git_stash, "stash-pop": gitops.git_stash_pop, "stash-list": gitops.git_stash_list,
-        "tag": lambda: gitops.git_tag(a[0]) if a else "Usage: tag <name>", "tag-list": gitops.git_list_tags,
-        "remote": gitops.git_list_remotes, "unstage": lambda: gitops.git_unstage(a[0]) if a else "Usage: reset <file>",
-        "cherry-pick": lambda: gitops.git_cherry_pick(a[0]) if a else "Usage: cherry-pick <sha>",
-        "blame": lambda: gitops.git_blame(a[0]) if a else "Usage: blame <file>",
-        "show": lambda: gitops.git_show_commit(a[0]) if a else "Usage: show <sha>",
         "merge": lambda: gitops.git_merge(a[0]) if a else "Usage: merge <branch>",
+        # ── Rebase ──
+        "rebase": lambda: gitops.git_rebase(a[0]) if a else "Usage: rebase <branch>",
+        "rebase-interactive": lambda: gitops.git_rebase_interactive(int(a[0]) if a else 3),
+        "rebase-continue": gitops.git_rebase_continue,
+        "rebase-abort": gitops.git_rebase_abort,
+        "rebase-skip": gitops.git_rebase_skip,
+        # ── Remote & Sync ──
+        "pull": gitops.git_pull,
+        "push": lambda: gitops.git_push(a[0] if a else None),
+        "fetch": gitops.git_fetch,
+        "remote": gitops.git_list_remotes,
+        "remote-add": lambda: gitops.git_remote_add(a[0], a[1]) if len(a) >= 2 else "Usage: add remote <name> <url>",
+        "remote-remove": lambda: gitops.git_remote_remove(a[0]) if a else "Usage: remove remote <name>",
+        "remote-rename": lambda: gitops.git_remote_rename(a[0], a[1]) if len(a) >= 2 else "Usage: rename remote <old> <new>",
+        "clone": lambda: gitops.github_clone(a[0] if a else "https://github.com/org/repo"),
+        "init": gitops.git_init,
+        # ── Stash ──
+        "stash": gitops.git_stash,
+        "stash-pop": gitops.git_stash_pop,
+        "stash-list": gitops.git_stash_list,
+        "stash-save": lambda: gitops.git_stash_save(a[0]) if a else "Usage: save stash as <name>",
+        "stash-drop": lambda: gitops.git_stash_drop(int(a[0]) if a else 0),
+        "stash-apply": lambda: gitops.git_stash_apply(int(a[0]) if a else 0),
+        # ── Tags ──
+        "tag": lambda: gitops.git_tag(a[0]) if a else "Usage: tag <name>",
+        "tag-commit": lambda: gitops.git_tag_commit(a[0], a[1]) if len(a) >= 2 else "Usage: tag <name> <sha>",
+        "tag-list": gitops.git_list_tags,
+        "tag-delete": lambda: gitops.git_tag_delete(a[0]) if a else "Usage: delete tag <name>",
+        "push-tags": gitops.git_push_tags,
+        # ── Reflog & Cherry-pick ──
+        "reflog": lambda: gitops.git_reflog(int(a[0]) if a else 20),
+        "cherry-pick": lambda: gitops.git_cherry_pick(a[0]) if a else "Usage: cherry-pick <sha>",
+        # ── Worktree ──
+        "worktree-list": gitops.git_worktree_list,
+        "worktree-add": lambda: gitops.git_worktree_add(a[0], a[1] if len(a) > 1 else "") if a else "Usage: add worktree <path>",
+        "worktree-remove": lambda: gitops.git_worktree_remove(a[0]) if a else "Usage: remove worktree <path>",
+        # ── Submodule ──
+        "submodule-status": gitops.git_submodule_status,
+        "submodule-update": gitops.git_submodule_update,
+        "submodule-add": lambda: gitops.git_submodule_add(a[0], a[1] if len(a) > 1 else "") if a else "Usage: add submodule <url>",
+        # ── Bisect ──
+        "bisect-start": gitops.git_bisect_start,
+        "bisect-good": lambda: gitops.git_bisect_good(a[0] if a else ""),
+        "bisect-bad": lambda: gitops.git_bisect_bad(a[0] if a else ""),
+        "bisect-reset": gitops.git_bisect_reset,
+        # ── Config ──
+        "config": gitops.git_config_list,
+        "config-set": lambda: gitops.git_config_set(a[0], a[1]) if len(a) >= 2 else "Usage: set config <key> <value>",
+        # ── GitHub ──
         "github-auth": gitops.github_auth,
         "github-clone": lambda: gitops.github_clone(a[0] if a else "https://github.com/org/repo"),
         "github-commit": lambda: gitops.github_commit(a[0] if a else "Update files"),
@@ -1151,7 +1212,7 @@ async def _handle_git(o: Orchestrator, raw: str, session: PromptSession, nlp: Nl
         "github-issues": gitops.github_issues,
         "github-releases": gitops.github_releases,
         "github-pr-create": lambda: gitops.github_pr_create(a[0] if a else "Feature Update"),
-        "github-pr-merge": lambda: gitops.github_pr_merge(a[0] if a else "42")
+        "github-pr-merge": lambda: gitops.github_pr_merge(a[0] if a else "42"),
     }
     fn = handlers.get(c)
     if not fn:

@@ -16,6 +16,8 @@ export declare class ServerManager {
     get isRunning(): boolean;
     /** Check if a server is already running at the configured URL. */
     detectRunning(): Promise<boolean>;
+    /** Inform the Python server of dynamic CWD changes during runtime */
+    updateRuntimeCwd(cwd: string): Promise<void>;
     /** Start the Python API server as a child process. */
     start(): Promise<boolean>;
     /** Stop the server. */

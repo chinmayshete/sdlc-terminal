@@ -553,11 +553,17 @@ async def pm_docs_search(query: str) -> list[str]:
     cs = ConfluenceService()
     docs = await cs.search_docs(query)
     if docs:
-        res = [f"[bold cyan]Confluence Search Results for '{query}' ({env.confluence_space_key})[/]:", ""]
+        if query:
+            res = [f"[bold cyan]Confluence Search Results for '{query}' ({env.confluence_space_key})[/]:", ""]
+        else:
+            res = [f"[bold cyan]Recent Confluence Documents ({env.confluence_space_key})[/]:", ""]
         for d in docs:
             res.append(f"  • [bold white]{d['title']}[/] — ([cyan]{d['url']}[/])")
         return res
-    return [f"[bold yellow]⚠ No Confluence documents matching '{query}' found in space '{env.confluence_space_key}'.[/]"]
+    if query:
+        return [f"[bold yellow]⚠ No Confluence documents matching '{query}' found in space '{env.confluence_space_key}'.[/]"]
+    else:
+        return [f"[bold yellow]⚠ No Confluence documents found in space '{env.confluence_space_key}'.[/]"]
 
 async def pm_docs_delete(title: str) -> list[str]:
     return [f"[bold red]✓ Confluence document '{title}' deleted.[/]"]

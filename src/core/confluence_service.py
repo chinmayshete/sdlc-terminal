@@ -54,7 +54,10 @@ class ConfluenceService:
         if not self._configured():
             return None
         try:
-            cql = f'space="{env.confluence_space_key}" and (text ~ "{query}" or title ~ "{query}")'
+            if query.strip():
+                cql = f'space="{env.confluence_space_key}" and (text ~ "{query}" or title ~ "{query}")'
+            else:
+                cql = f'space="{env.confluence_space_key}" order by lastModified desc'
             creds = base64.b64encode(f"{env.jira_email}:{env.jira_api_token}".encode()).decode()
             url = f"{env.jira_host}/wiki/rest/api/content/search"
             async with httpx.AsyncClient(verify=not env.skip_ssl_verify, timeout=15) as client:

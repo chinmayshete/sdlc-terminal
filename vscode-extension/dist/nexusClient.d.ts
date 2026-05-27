@@ -72,8 +72,15 @@ export declare class NexusClient {
     refreshConfig(): void;
     /** Get the current base URL. */
     getBaseUrl(): string;
+    /**
+     * FIX: Dynamically gets the most relevant workspace root folder.
+     * Prioritizes the workspace containing the active open file, falls back to the first workspace root.
+     */
+    private _getCurrentCwd;
     /** Check if the server is reachable. */
     ping(): Promise<boolean>;
+    /** Update workspace runtime directory on the server. */
+    updateCwd(cwd: string): Promise<any>;
     /** Get workspace status (tickets, AI config). */
     getStatus(): Promise<StatusResponse>;
     /** Check AI health. */

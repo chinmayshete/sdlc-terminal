@@ -2,7 +2,13 @@
 from pathlib import Path
 import os
 
-root_dir = Path(__file__).parent.parent.parent.resolve()
+# Determine the root directory dynamically. We check NEXUS_CWD first (which is injected
+# by the VS Code extension to point to the active workspace folder) and fallback to CWD.
+nexus_cwd = os.environ.get("NEXUS_CWD")
+if nexus_cwd:
+    root_dir = Path(nexus_cwd).resolve()
+else:
+    root_dir = Path.cwd().resolve()
 
 paths = {
     "root_dir": root_dir,

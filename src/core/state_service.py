@@ -6,7 +6,9 @@ from ..config.paths import paths
 from ..core.types import Ticket, TicketStatusEntry, TicketStatusValue
 
 class StateService:
-    def __init__(self): self._path = paths["state_file"]
+    @property
+    def _path(self):
+        return paths["state_file"]
 
     def _load(self) -> dict: 
         try: return json.loads(self._path.read_text("utf-8"))

@@ -41,6 +41,10 @@ class GitCommandRequest(BaseModel):
     """Git command with optional arguments."""
     args: list[str] = Field(default_factory=list)
 
+class CwdRequest(BaseModel):
+    """Update server workspace context."""
+    cwd: str
+
 class DevOpsCommandRequest(BaseModel):
     """DevOps command with optional arguments."""
     args: list[str] = Field(default_factory=list)

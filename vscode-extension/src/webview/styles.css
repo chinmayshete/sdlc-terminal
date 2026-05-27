@@ -80,6 +80,7 @@ body {
 /* ── Mode Bar ────────────────────────────────────────────── */
 .nexus-mode-bar {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   margin-bottom: 6px;
 }
@@ -168,12 +169,12 @@ body {
 /* ── Quick Actions ───────────────────────────────────────── */
 .quick-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   padding: 6px 12px;
   border-bottom: 1px solid var(--border-primary);
   background: var(--bg-secondary);
   flex-shrink: 0;
-  overflow-x: auto;
 }
 
 .quick-btn {
@@ -372,6 +373,8 @@ body {
   font-size: 12px;
   line-height: 1.6;
   color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 .output-panel-body .output-line {
@@ -657,7 +660,8 @@ body {
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-sm);
   padding: 8px 10px;
-  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 .permission-body code {

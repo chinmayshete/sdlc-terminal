@@ -15,8 +15,9 @@ class SkillsLoader:
     so the agent always reasons in line with team standards.
     """
 
-    def __init__(self):
-        self.skills_dir: Path = paths["skills_dir"]
+    @property
+    def skills_dir(self) -> Path:
+        return paths["skills_dir"]
 
     def load_all(self) -> list[RepoFile]:
         """Load ALL skill documents. Used for freeform chat so agent is always fully skills-aware."""

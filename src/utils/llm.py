@@ -157,8 +157,14 @@ async def generate_plan(ticket: Ticket, files: list[RepoFile], mode: str = "basi
         else:
             sys_desc = "Provide a concise high-level plan (typically 5-10 steps)."
         
-        sys = f'Return JSON only: {{"steps": string[]}}. {sys_desc}'
-        r = await _call_llm_json([{"role": "system", "content": sys}, {"role": "user", "content": json.dumps({"ticket": {"id": ticket.id, "title": ticket.title, "description": ticket.description}, "files": [f.path for f in files]})}])
+        sys = (
+            f'Return JSON only: {{"steps": string[]}}. {sys_desc} '
+            'You MUST base the project plan steps on the requirements, architecture, and constraints defined in the `[Confluence Requirement]` file. '
+            'Use the Confluence project plan as your primary knowledge base for planning this story. '
+            'Also, follow the coding standards and guidelines in the `[Skill: ...]` files.'
+        )
+        r = await _call_llm_json([{"role": "system", "content": sys},
+            {"role": "user", "content": json.dumps({"ticket": {"id": ticket.id, "title": ticket.title, "description": ticket.description}, "files": [{"path": f.path, "content": f.content} for f in files]})}] )
         return r.get("steps") or fallback
     except Exception: return fallback
 
@@ -166,7 +172,12 @@ async def generate_plan(ticket: Ticket, files: list[RepoFile], mode: str = "basi
 async def generate_code(ticket: Ticket, files: list[RepoFile]) -> list[CodeChange]:
     if not _use_llm(): return []
     try:
-        r = await _call_llm_json([{"role": "system", "content": 'Return JSON: {"files": [{"path": str, "content": str}]}. Complete file contents.'},
+        sys = (
+            'Return JSON: {"files": [{"path": str, "content": str}]}. Complete file contents. '
+            'You MUST follow the constraints, details, and requirements outlined in the `[Confluence Requirement]` file '
+            'and use the coding standards/guidelines in the `[Skill: ...]` files as your knowledge base for generating code.'
+        )
+        r = await _call_llm_json([{"role": "system", "content": sys},
             {"role": "user", "content": json.dumps({"ticket": {"id": ticket.id, "title": ticket.title, "description": ticket.description}, "files": [{"path": f.path, "content": f.content} for f in files]})}])
         return [CodeChange(path=f["path"], content=f["content"]) for f in r.get("files", []) if isinstance(f, dict) and "path" in f and "content" in f]
     except Exception: return []
@@ -198,6 +209,8 @@ async def generate_free_nlp_chat(files: list[RepoFile], history: list[NlpChatTur
             'Only include files/folders for changes/deletions/creations. '
             'To create a folder/directory, end the path with a trailing slash (e.g. "calc/") and set content to "". '
             'To delete a file or folder, set "action": "delete" and "content": "". '
+            'You MUST follow the coding standards, patterns, and guidelines defined in the `[Skill: ...]` files. '
+            'Use the skills folder as your primary knowledge base for generating code. '
             'If the user asks to execute any project/git/security/devops/pm command or action (e.g. "plan ticket SCRUM-12", "execute SCRUM-12", "run scan", "check git status", "reset status of SCRUM-12", etc.), '
             'populate "commands" with the list of CLI commands to run (e.g. ["pm plan SCRUM-12"], ["security scan"], ["git status"], ["pm reset SCRUM-12"], etc.).'
         )

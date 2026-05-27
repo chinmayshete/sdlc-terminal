@@ -3,7 +3,7 @@
  * All VS Code extension features route through this client.
  */
 import * as vscode from 'vscode';
-
+import * as path from 'path';
 // ── Types ───────────────────────────────────────────────────
 
 export interface ChatResponse {
@@ -107,6 +107,25 @@ export class NexusClient {
     return this.baseUrl;
   }
 
+  /**
+   * FIX: Dynamically gets the most relevant workspace root folder.
+   * Prioritizes the workspace containing the active open file, falls back to the first workspace root.
+   */
+  private _getCurrentCwd(): string {
+    const activeEditor = vscode.window.activeTextEditor;
+    if (activeEditor && activeEditor.document.uri.scheme === 'file') {
+      const workspaceFolder = vscode.workspace.getWorkspaceFolder(activeEditor.document.uri);
+      if (workspaceFolder) {
+        return workspaceFolder.uri.fsPath;
+      }
+    }
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (workspaceFolders && workspaceFolders.length > 0) {
+      return workspaceFolders[0].uri.fsPath;
+    }
+    return '';
+  }
+
   // ── Health & Status ─────────────────────────────────────
 
   /** Check if the server is reachable. */
@@ -117,6 +136,11 @@ export class NexusClient {
     } catch {
       return false;
     }
+  }
+
+  /** Update workspace runtime directory on the server. */
+  async updateCwd(cwd: string): Promise<any> {
+    return this._post('/api/cwd', { cwd });
   }
 
   /** Get workspace status (tickets, AI config). */

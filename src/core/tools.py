@@ -8,6 +8,9 @@ from ..config.paths import paths
 
 async def run_command_tool(cmd: str) -> dict:
     """Executes a shell command in the workspace and returns stdout/stderr."""
+    import os
+    if os.name == 'nt' and cmd.strip().lower() == 'pwd':
+        cmd = 'cd'
     proc = None
     try:
         proc = await asyncio.create_subprocess_shell(

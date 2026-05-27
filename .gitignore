@@ -30,3 +30,5 @@ yarn-error.log*
 repo/
 *.pyc
 __pycache__/*
+*.zip
+tickets/

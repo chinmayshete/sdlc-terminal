@@ -61,6 +61,34 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   }
 
   console.log('Nexus SDLC extension activated.');
+
+  // Listen for interactive terminal updates (Shell Integration)
+  context.subscriptions.push(
+    vscode.window.onDidChangeTerminalShellIntegration(async (e) => {
+      if (e.terminal.shellIntegration && e.terminal.shellIntegration.cwd) {
+        const activeCwd = e.terminal.shellIntegration.cwd.fsPath;
+        const workspaceFolder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(activeCwd));
+        const cwd = workspaceFolder ? workspaceFolder.uri.fsPath : vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (cwd) {
+          await serverManager.updateRuntimeCwd(cwd);
+        }
+      }
+    })
+  );
+
+  // Listen for active text editor switches to track user focus
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveTextEditor(async (editor) => {
+      if (editor && editor.document.uri.scheme === 'file') {
+        const workspaceFolder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
+        const cwd = workspaceFolder ? workspaceFolder.uri.fsPath : vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (cwd) {
+          await serverManager.updateRuntimeCwd(cwd);
+        }
+      }
+    })
+  );
+
 }
 
 export function deactivate(): void {

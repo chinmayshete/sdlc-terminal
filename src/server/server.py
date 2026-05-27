@@ -10,9 +10,9 @@ from __future__ import annotations
 import asyncio
 import traceback
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, Optional
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Header,Depends
 from fastapi.middleware.cors import CORSMiddleware
 
 from .models import (
@@ -27,6 +27,7 @@ from .models import (
     ModeInfo, ModesResponse,
     ScanFileRequest,
     ServerInfo,
+    CwdRequest,
 )
 from ..core.orchestrator import Orchestrator
 from ..core.types import NlpChatTurn
@@ -42,6 +43,9 @@ from ..utils import agile_operations as pmops
 from ..utils import system_operations as sysops
 from ..utils.git import create_release_branch, create_hotfix_branch, merge_feature_to_develop, rollback_last_commit, rollback_to_commit
 from ..config.paths import paths
+
+
+import os
 
 # ── Global state ─────────────────────────────────────────────
 _orchestrator: Orchestrator | None = None
@@ -115,15 +119,23 @@ async def _try_execute_mode_command(o: Orchestrator, raw: str, mode: str) -> Com
 
         intent = await parse_nexus_intent_with_llm(raw)
         if intent.command != "unknown":
-            return await _exec_command_mode(o, raw)
+            return await _exec_command_mode(o, raw, intent)
     elif mode == "git":
-        return await _exec_git_mode(o, raw)
+        intent = await parse_git_intent_with_llm(raw)
+        if intent.command != "unknown":
+            return await _exec_git_mode(o, raw, intent)
     elif mode == "security":
-        return await _exec_security_mode(o, raw)
+        intent = await parse_security_intent_with_llm(raw)
+        if intent.command != "unknown":
+            return await _exec_security_mode(o, raw, intent)
     elif mode == "devops":
-        return await _exec_devops_mode(o, raw)
+        intent = await parse_devops_intent_with_llm(raw)
+        if intent.command != "unknown":
+            return await _exec_devops_mode(o, raw, intent)
     elif mode == "agile":
-        return await _exec_agile_mode(o, raw)
+        intent = await parse_agile_intent_with_llm(raw)
+        if intent.command != "unknown":
+            return await _exec_agile_mode(o, raw, intent)
     return None
 
 # ── Root ─────────────────────────────────────────────────────
@@ -184,6 +196,34 @@ async def chat(req: ChatRequest):
             changes=changes,
             commands=result.commands if result.commands else [],
         )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/cwd")
+async def update_cwd(req: CwdRequest):
+    """Dynamically update the workspace root directory for the paths module."""
+    from pathlib import Path
+    from ..config.paths import paths
+    try:
+        new_path = Path(req.cwd).resolve()
+        if not new_path.exists() or not new_path.is_dir():
+            raise HTTPException(status_code=400, detail=f"Invalid directory path: {req.cwd}")
+        
+        paths["root_dir"] = new_path
+        paths["tickets_dir"] = new_path / "tickets"
+        paths["repo_dir"] = new_path
+        paths["app_repo_dir"] = new_path
+        paths["state_dir"] = new_path / ".sdlc"
+        paths["state_file"] = new_path / ".sdlc" / "state.json"
+        paths["skills_dir"] = new_path / "skills"
+        
+        # Trigger reload of env files in the new workspace context
+        from ..config.env import reload_env
+        reload_env()
+        
+        return {"status": "success", "cwd": str(new_path)}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -497,9 +537,10 @@ async def websocket_chat(websocket: WebSocket):
 
 # ── Mode-specific command executors (mirrors terminal.py logic) ──
 
-async def _exec_command_mode(o: Orchestrator, raw: str) -> CommandResponse:
+async def _exec_command_mode(o: Orchestrator, raw: str, intent: Any = None) -> CommandResponse:
     """Execute a command in main/nexus mode."""
-    intent = await parse_nexus_intent_with_llm(raw)
+    if intent is None:
+        intent = await parse_nexus_intent_with_llm(raw)
     c, a = intent.command, intent.args
 
     if c == "status":
@@ -553,9 +594,10 @@ async def _exec_command_mode(o: Orchestrator, raw: str) -> CommandResponse:
         return CommandResponse(title="Nexus AI", output=output)
 
 
-async def _exec_git_mode(o: Orchestrator, raw: str) -> CommandResponse:
+async def _exec_git_mode(o: Orchestrator, raw: str, intent: Any = None) -> CommandResponse:
     """Execute a command in git mode."""
-    intent = await parse_git_intent_with_llm(raw)
+    if intent is None:
+        intent = await parse_git_intent_with_llm(raw)
     c, a = intent.command, intent.args
 
     if c == "help":
@@ -614,9 +656,10 @@ async def _exec_git_mode(o: Orchestrator, raw: str) -> CommandResponse:
     return CommandResponse(title=f"Git: {c}", output=_safe_list(r))
 
 
-async def _exec_security_mode(o: Orchestrator, raw: str) -> CommandResponse:
+async def _exec_security_mode(o: Orchestrator, raw: str, intent: Any = None) -> CommandResponse:
     """Execute a command in security mode."""
-    intent = await parse_security_intent_with_llm(raw)
+    if intent is None:
+        intent = await parse_security_intent_with_llm(raw)
     c, a = intent.command, intent.args
 
     if c == "help":
@@ -660,9 +703,10 @@ async def _exec_security_mode(o: Orchestrator, raw: str) -> CommandResponse:
     return CommandResponse(title=f"Security: {c}", output=_safe_list(r))
 
 
-async def _exec_devops_mode(o: Orchestrator, raw: str) -> CommandResponse:
+async def _exec_devops_mode(o: Orchestrator, raw: str, intent: Any = None) -> CommandResponse:
     """Execute a command in devops mode."""
-    intent = await parse_devops_intent_with_llm(raw)
+    if intent is None:
+        intent = await parse_devops_intent_with_llm(raw)
     c, a = intent.command, intent.args
 
     if c == "help":
@@ -736,9 +780,10 @@ async def _exec_devops_mode(o: Orchestrator, raw: str) -> CommandResponse:
     return CommandResponse(title=f"DevOps: {c}", output=_safe_list(r))
 
 
-async def _exec_agile_mode(o: Orchestrator, raw: str) -> CommandResponse:
+async def _exec_agile_mode(o: Orchestrator, raw: str, intent: Any = None) -> CommandResponse:
     """Execute a command in agile mode."""
-    intent = await parse_agile_intent_with_llm(raw)
+    if intent is None:
+        intent = await parse_agile_intent_with_llm(raw)
     c, a = intent.command, intent.args
 
     # Ticket-related commands

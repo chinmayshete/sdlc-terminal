@@ -118,6 +118,63 @@ async def get_sensitive_fields() -> list[str]:
 # ── C: Dependency Audit ──────────────────────────────────────
 async def audit_dependencies() -> list[str]:
     import sys
+    
+    osv_scanner_path = paths["root_dir"] / ".sdlc" / "tools" / "osv-scanner.exe"
+    
+    if osv_scanner_path.exists():
+        cmd = f'"{osv_scanner_path}" -r --format json .'
+        stdout, stderr, code = _shell(cmd, timeout=120)
+        
+        # OSV-Scanner outputs to stderr if it fails completely, but outputs JSON to stdout even if it finds vulnerabilities (exit code 1)
+        if not stdout.strip():
+            return [f"[bold red]✗ Multi-language dependency audit failed[/] (code {code}).", f"[cyan]Message[/]: [white]{stderr.strip() or 'No output'}[/]"]
+            
+        try:
+            data = json.loads(stdout)
+            results = data.get("results", [])
+            if not results:
+                return ["[bold green]✓ No known vulnerabilities found across any dependencies.[/]"]
+                
+            vuln_count = 0
+            lines = []
+            
+            for result in results:
+                source_path = result.get("source", {}).get("path", "Unknown")
+                packages = result.get("packages", [])
+                
+                for pkg in packages:
+                    pkg_name = pkg.get("package", {}).get("name", "Unknown")
+                    vulns = pkg.get("vulnerabilities", [])
+                    
+                    if vulns:
+                        vuln_count += len(vulns)
+                        lines.append(f"[bold cyan]Source[/]: [yellow]{source_path}[/]")
+                        for v in vulns[:5]:
+                            summary = v.get("summary", "No summary provided")
+                            s_lower = summary.lower()
+                            cat = "Security Flaw"
+                            if "traversal" in s_lower or "directory escape" in s_lower: cat = "Path Traversal"
+                            elif "symlink" in s_lower: cat = "Symlink Attack"
+                            elif "injection" in s_lower: cat = "Code Injection"
+                            elif "xss" in s_lower or "cross-site" in s_lower: cat = "Cross-Site Scripting (XSS)"
+                            elif "denial of service" in s_lower or "dos " in s_lower: cat = "Denial of Service"
+                            elif "overflow" in s_lower: cat = "Buffer Overflow"
+                            elif "deserialization" in s_lower: cat = "Insecure Deserialization"
+                            
+                            lines.append(f"  • [bold yellow]{pkg_name}[/]: [bold red][{cat}][/] - [white]{summary}[/]")
+                        if len(vulns) > 5:
+                            lines.append(f"  • [dim]...and {len(vulns) - 5} more vulnerabilities for this package.[/]")
+                        lines.append("")
+                        
+            if vuln_count == 0:
+                return ["[bold green]✓ No known vulnerabilities found across any dependencies.[/]"]
+                
+            header = [f"[bold red]✗ {vuln_count} vulnerability(ies) detected across the project[/]:", ""]
+            return header + lines
+        except Exception as e:
+            return [f"[bold red]Universal audit error[/]: {e}\nRaw: {stdout[:100]}"]
+
+    # Fallback to Python-only pip-audit if OSV-Scanner is not installed
     venv_py = paths["root_dir"] / ".venv" / "Scripts" / "python.exe"
     py_exe = str(venv_py) if venv_py.exists() else sys.executable
     
@@ -133,12 +190,21 @@ async def audit_dependencies() -> list[str]:
     try:
         data = json.loads(stdout)
         vulns = data.get("vulnerabilities", []) if isinstance(data, dict) else data
-        if not vulns: return ["[bold green]✓ No known vulnerabilities in Python dependencies.[/]"]
+        if not vulns: return ["[bold green]✓ No known vulnerabilities found across any dependencies.[/]"]
         lines = [f"[bold red]✗ {len(vulns)} vulnerability(ies) detected[/]:", ""]
         for v in vulns[:10]:
             name = v.get("name", "?") if isinstance(v, dict) else "?"
-            vid = v.get("id", "?") if isinstance(v, dict) else "?"
-            lines.append(f"  • [bold yellow]{name}[/]: [bold red]{vid}[/]")
+            summary = v.get("summary", v.get("description", "No summary provided")) if isinstance(v, dict) else "Unknown"
+            s_lower = summary.lower()
+            cat = "Security Flaw"
+            if "traversal" in s_lower: cat = "Path Traversal"
+            elif "symlink" in s_lower: cat = "Symlink Attack"
+            elif "injection" in s_lower: cat = "Code Injection"
+            elif "xss" in s_lower: cat = "Cross-Site Scripting (XSS)"
+            elif "denial of service" in s_lower: cat = "Denial of Service"
+            elif "overflow" in s_lower: cat = "Buffer Overflow"
+            
+            lines.append(f"  • [bold yellow]{name}[/]: [bold red][{cat}][/] - [dim]{summary[:80]}...[/]")
         return lines
     except Exception as e: return [f"[bold red]Dependency audit error[/]: {e}\nRaw: {stdout[:100]}"]
 

@@ -32,6 +32,21 @@ export class ServerManager {
     return running;
   }
 
+  /** Inform the Python server of dynamic CWD changes during runtime */
+  async updateRuntimeCwd(cwd: string): Promise<void> {
+    if (this._isRunning) {
+      try {
+        // Assumes your NexusClient has a method to post the updated CWD to the Python API
+        if (typeof (this.client as any).updateCwd === 'function') {
+          await (this.client as any).updateCwd(cwd);
+        }
+        console.log(`[Nexus] Synced runtime CWD to server: ${cwd}`);
+      } catch (err) {
+        console.error(`[Nexus] Failed to sync runtime CWD: ${err}`);
+      }
+    }
+  }
+
   /** Start the Python API server as a child process. */
   async start(): Promise<boolean> {
     // Check if already running
@@ -55,9 +70,15 @@ export class ServerManager {
     this.outputChannel.show(true);
 
     try {
+      // FIX: Inject NEXUS_CWD and PYTHONPATH into environment variables 
+      // This ensures Python reliably catches the target path regardless of shell execution context
       this.process = spawn(pythonPath, ['-m', 'src.cli.program', 'serve', '--port', port.toString()], {
         cwd: workspaceFolder,
-        env: { ...process.env },
+        env: { 
+          ...process.env,
+          NEXUS_CWD: workspaceFolder,
+          PYTHONPATH: workspaceFolder // Helps python locate 'src' if it's relative to the workspace root
+        },
         shell: true,
       });
 

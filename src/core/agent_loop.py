@@ -43,7 +43,14 @@ class AgentLoop:
 
     def _ensure_system_prompt(self):
         if not self.history or self.history[0].get("role") != "system":
-            self.history.insert(0, {"role": "system", "content": SYSTEM_PROMPT})
+            import os
+            from ..config.paths import paths
+            sys_info = (
+                f"\n\n[System Information]\n"
+                f"Operating System: {'Windows' if os.name == 'nt' else 'Unix/Linux'}\n"
+                f"Workspace Root Directory: {paths['root_dir']}\n"
+            )
+            self.history.insert(0, {"role": "system", "content": SYSTEM_PROMPT + sys_info})
 
     async def start_turn(self, user_message: str) -> Dict[str, Any]:
         """Starts a new agent turn with the user's prompt."""
