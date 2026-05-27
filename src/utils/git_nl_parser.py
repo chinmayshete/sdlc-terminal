@@ -59,7 +59,7 @@ _RULES = [
 
     # ── Remote & Sync ──
     (r"^(?:git\s+)?pull$|^(?:get|sync|download)\s+(?:the\s+)?(?:latest|updates?|changes?)$", "pull", []),
-    (r"^(?:git\s+)?push(?:\s+(.+))?$|^push\s+(?:my\s+)?(?:changes?|code)?(?:\s+(?:to\s+)?(.+))?$", "push", None),
+    (r"^(?:git\s+)?push(?:\s+(?:my\s+)?(?:changes?|code)\s+(?:to\s+)?(.+))?$|^(?:git\s+)?push\s+(?:to\s+)?([a-z][a-z0-9/_-]*)$|^push\s+(?:my\s+)?(?:changes?|code)?(?:\s+(?:to\s+)?(.+))?$|^(?:git\s+)?push$", "push", None),
     (r"^(?:git\s+)?fetch$", "fetch", []),
     (r"^(?:git\s+)?remote(?:\s+-v)?$|^(?:list|show)\s+(?:the\s+)?remotes?$", "remote", []),
     (r"^add\s+remote\s+(\S+)\s+(\S+)$|^(?:git\s+)?remote\s+add\s+(\S+)\s+(\S+)$", "remote-add", None),
