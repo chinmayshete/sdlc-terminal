@@ -3,6 +3,8 @@ node_modules/
 
 # Build artifacts
 *.tsbuildinfo
+dist/
+build/
 
 # Environment & Secrets
 .venv/
