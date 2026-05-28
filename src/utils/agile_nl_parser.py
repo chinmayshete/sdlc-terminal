@@ -144,15 +144,15 @@ _RULES_WITH_ARGS = [
     (r"^(?:nexus\s+)?project\s+archive\s+(\S+)$", "project-archive"),
 
     # Epic
-    (r"^(?:nexus\s+)?epic\s+view\s+(\S+)$", "epic-view"),
+    (r"^(?:nexus\s+)?(?:view\s+)?epic(?:\s+view)?\s+(\S+)$", "epic-view"),
     (r"^(?:nexus\s+)?epic\s+update\s+(\S+)\s+(\S+)\s+(.+)$", "epic-update"),
     (r"^(?:nexus\s+)?epic\s+delete\s+(\S+)$", "epic-delete"),
-    (r"^(?:nexus\s+)?epic\s+stories\s+(\S+)$", "epic-stories"),
+    (r"^(?:nexus\s+)?(?:list\s+|show\s+)?(?:epic\s+)?stories(?:\s+(?:under|for|of|in))?\s+(\S+)$", "epic-stories"),
     (r"^(?:nexus\s+)?epic\s+progress\s+(\S+)$", "epic-progress"),
     (r"^(?:nexus\s+)?epic\s+assign\s+(\S+)\s+(\S+)$", "epic-assign"),
 
     # Story
-    (r"^(?:nexus\s+)?story\s+view\s+(\S+)$", "story-view"),
+    (r"^(?:nexus\s+)?(?:view\s+)?story(?:\s+view)?\s+(\S+)$", "story-view"),
     (r"^(?:nexus\s+)?story\s+update\s+(\S+)\s+(\S+)\s+(.+)$", "story-update"),
     (r"^(?:nexus\s+)?story\s+move\s+(\S+)\s+(.+)$", "story-move"),
     (r"^(?:nexus\s+)?story\s+assign\s+(\S+)\s+(\S+)$", "story-assign"),
@@ -209,17 +209,52 @@ _RULES_WITH_ARGS = [
     (r"^(?:nexus\s+)?reset\s+(\S+)$", "reset"),
 ]
 
+def normalize_ticket_id(tid: str) -> str:
+    if not isinstance(tid, str) or not tid.strip():
+        return tid
+    m = re.match(r"^([a-zA-Z]+)(\d+)$", tid.strip())
+    if m:
+        tid = f"{m.group(1)}-{m.group(2)}"
+    m2 = re.match(r"^([a-zA-Z]+)-(\d+)$", tid.strip())
+    if m2:
+        prefix, num = m2.group(1), m2.group(2)
+        try:
+            from ..config.env import env
+            proj_key = (env.jira_project_key or "SDLC").upper()
+        except Exception:
+            proj_key = "SDLC"
+        def edit_distance(s1: str, s2: str) -> int:
+            if len(s1) > len(s2):
+                s1, s2 = s2, s1
+            distances = range(len(s1) + 1)
+            for i2, c2 in enumerate(s2):
+                distances_ = [i2+1]
+                for i1, c1 in enumerate(s1):
+                    if c1 == c2:
+                        distances_.append(distances[i1])
+                    else:
+                        distances_.append(1 + min((distances[i1], distances[i1 + 1], distances_[-1])))
+                distances = distances_
+            return distances[-1]
+        if len(prefix) >= 3 and edit_distance(prefix.lower(), proj_key.lower()) <= 2:
+            return f"{proj_key}-{num}"
+        if prefix.upper() == proj_key:
+            return f"{proj_key}-{num}"
+    return tid
+
 def parse_agile_intent(text: str) -> AgileIntent:
     t = re.sub(r"^nexus\s+", "", text.strip(), flags=re.IGNORECASE).strip()
     for pattern, cmd, args in _RULES:
         if re.match(pattern, t, re.IGNORECASE):
-            return AgileIntent(cmd, args, t, "rule")
+            norm_args = [normalize_ticket_id(a) for a in args]
+            return AgileIntent(cmd, norm_args, t, "rule")
             
     for pattern, cmd in _RULES_WITH_ARGS:
         m = re.match(pattern, t, re.IGNORECASE)
         if m:
             args = [g for g in m.groups() if g]
-            return AgileIntent(cmd, args, t, "rule")
+            norm_args = [normalize_ticket_id(a) for a in args]
+            return AgileIntent(cmd, norm_args, t, "rule")
             
     return AgileIntent("unknown", [], t, "unknown")
 
@@ -235,7 +270,8 @@ async def parse_agile_intent_with_llm(text: str) -> AgileIntent:
     
     parsed = await parse_intent_with_llm(text, prompt)
     if parsed: 
-        return AgileIntent(parsed["command"], parsed["args"], text, "llm")
+        norm_args = [normalize_ticket_id(a) for a in parsed["args"]]
+        return AgileIntent(parsed["command"], norm_args, text, "llm")
     return r
 
 def get_agile_command_help() -> list[str]:
