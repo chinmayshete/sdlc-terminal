@@ -303,8 +303,8 @@ def update_env_var(key: str, value: str):
             
         try:
             path.write_text("\n".join(lines) + "\n", "utf-8")
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[update_env_var] ERROR writing to {path}: {e}")
             
     # Update local .env
     env_file = paths["root_dir"] / ".env"

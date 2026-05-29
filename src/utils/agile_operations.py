@@ -114,7 +114,6 @@ async def pm_project_select(key: str) -> list[str]:
     from ..config.env import env
     old_key = env.jira_project_key
     proj_key = key.upper()
-    env.jira_project_key = proj_key
     
     # Map Jira project key to Confluence space key dynamically based on project URLs
     space_map = {
@@ -123,7 +122,10 @@ async def pm_project_select(key: str) -> list[str]:
         "SCRUM": "NS"
     }
     space_key = space_map.get(proj_key, proj_key)
-    env.confluence_space_key = space_key
+    
+    from .system_operations import update_env_var
+    update_env_var("JIRA_PROJECT_KEY", proj_key)
+    update_env_var("CONFLUENCE_SPACE_KEY", space_key)
     
     return [
         f"[bold green]✓ Switched active Jira project[/] to '[bold cyan]{proj_key}[/]'.",
@@ -674,7 +676,10 @@ async def pm_docs_export(path: str = "confluence_export.pdf") -> list[str]:
 async def pm_docs_select(space_key: str) -> list[str]:
     from ..config.env import env
     old_key = env.confluence_space_key
-    env.confluence_space_key = space_key.upper()
+    
+    from .system_operations import update_env_var
+    update_env_var("CONFLUENCE_SPACE_KEY", space_key.upper())
+    
     return [
         f"[bold green]✓ Switched active Confluence space[/] from '[bold cyan]{old_key}[/]' to '[bold cyan]{space_key.upper()}[/]'.",
         f"[dim]All subsequent Confluence commands will execute against space '{space_key.upper()}'.[/]"
