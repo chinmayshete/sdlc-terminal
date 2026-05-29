@@ -37,6 +37,19 @@ def run_tests():
     test_intent("view story SCRUM-10", "story-view", ["SCRUM-10"])
     test_intent("story scrun-10", "story-view", ["SCRUM-10"])
 
+    # Test cases for project-select
+    test_intent("project select FP", "project-select", ["FP"])
+    test_intent("project switch FP", "project-select", ["FP"])
+    test_intent("project use FP", "project-select", ["FP"])
+    test_intent("switch project FP", "project-select", ["FP"])
+    test_intent("project FP", "project-select", ["FP"])
+
+    # Test cases for docs-select
+    test_intent("docs select FP", "docs-select", ["FP"])
+    test_intent("docs use FP", "docs-select", ["FP"])
+    test_intent("docs space FP", "docs-select", ["FP"])
+    test_intent("select docs FP", "docs-select", ["FP"])
+
     print("All basic regex tests passed successfully!")
 
 if __name__ == "__main__":

@@ -70,6 +70,25 @@ async def run_terminal(orchestrator: Orchestrator):
                     break
                 if new_mode:
                     mode = new_mode
+                    if mode == "agile":
+                        projects = await pmops.pm_project_list()
+                        print_panel("Active Jira Projects", projects)
+                        console.print("[bold yellow]Please select a project to proceed (enter Key/Name, or type 'exit' to cancel):[/]")
+                        while True:
+                            selected = await asyncio.get_event_loop().run_in_executor(
+                                None, 
+                                lambda: session.prompt(HTML("<ansiblue><b>select project &gt; </b></ansiblue>"))
+                            )
+                            selected = selected.strip()
+                            if not selected:
+                                continue
+                            if selected.lower() in ("exit", "quit", "back", "q"):
+                                mode = "command"
+                                console.print("[yellow]Project selection cancelled. Returning to main mode.[/]")
+                                break
+                            res = await pmops.pm_project_select(selected)
+                            print_panel("Project Selected", res)
+                            break
                 if result:
                     print_panel(result.get("title", "Nexus"), result.get("output", []))
 
@@ -1011,12 +1030,8 @@ async def _handle_command(o: Orchestrator, raw: str, session: PromptSession, nlp
 
     # System Handlers
     if c == "status":
-        s = await with_spinner("Loading...", lambda: o.status("command"))
-        lines = [f"[bold dodger_blue2]AI Service[/]: [bold cyan]{s.ai_mode}[/] ([green if s.ai_configured else 'red']{'configured' if s.ai_configured else 'not configured'}[/])", ""]
-        for t in s.tickets:
-            scolor = "bold green" if t.status == "COMPLETED" else "bold yellow" if t.status == "IN_DEVELOPMENT" else "cyan"
-            lines.append(f"  • [bold white]{t.ticket_id}[/]: [{scolor}]{t.status}[/] ([dim italic]{t.note or 'No notes'}[/])")
-        return {"title": "Workspace Status", "output": lines}, None, False
+        r = await with_spinner("Loading...", lambda: sysops.run_system_status(include_jira_confluence=False))
+        return {"title": "Nexus Status", "output": r}, None, False
     elif c == "health":
         r = await with_spinner("Checking Health...", sysops.run_system_health)
         return {"title": "System Health", "output": r}, None, False
@@ -1405,6 +1420,7 @@ async def _handle_agile(o: Orchestrator, raw: str, session: PromptSession, nlp: 
         "project-status": lambda: pmops.pm_project_status(a[0] if a else ""),
         "project-delete": lambda: pmops.pm_project_delete(a[0] if a else "DEMO"),
         "project-archive": lambda: pmops.pm_project_archive(a[0] if a else "DEMO"),
+        "project-select": lambda: pmops.pm_project_select(a[0] if a else "SDLC"),
         "epic-create": lambda: pmops.pm_epic_create(a[0] if a else "New Epic Feature"),
         "epic-list": pmops.pm_epic_list,
         "epic-view": lambda: pmops.pm_epic_view(a[0] if a else "SDLC-101"),
@@ -1466,6 +1482,7 @@ async def _handle_agile(o: Orchestrator, raw: str, session: PromptSession, nlp: 
         "docs-delete": lambda: pmops.pm_docs_delete(a[0] if a else "Old Doc"),
         "docs-link": lambda: pmops.pm_docs_link(a[0] if a else "Spec Doc", a[1] if len(a)>1 else "SDLC-10"),
         "docs-export": pmops.pm_docs_export,
+        "docs-select": lambda: pmops.pm_docs_select(a[0] if a else "SDLC"),
         "ai-summarize-sprint": pmops.pm_ai_summarize_sprint,
         "ai-summarize-epic": pmops.pm_ai_summarize_epic,
         "ai-generate-stories": pmops.pm_ai_generate_stories,

@@ -13,16 +13,20 @@ async def run_system_init() -> list[str]:
     (sdlc / "config.json").write_text(json.dumps({"version": "0.1.0", "mode": "azure"}), "utf-8")
     return ["[bold green]✓ Nexus SDLC initialized in workspace.[/]", f"[cyan]Directory[/]: {sdlc}"]
 
-async def run_system_status() -> list[str]:
+async def run_system_status(include_jira_confluence: bool = True) -> list[str]:
     from ..utils.llm import check_ai_health
     h = await check_ai_health()
-    return [
+    lines = [
         "[bold cyan]Nexus System Status[/]:",
         f"  • [bold white]AI Backend[/]: [cyan]{h.mode}[/] ({'Connected' if h.reachable else 'Unreachable'})",
-        f"  • [bold white]Workspace Root[/]: [dim]{paths['root_dir']}[/]",
-        f"  • [bold white]Jira Project[/]: [magenta]{env.jira_project_key}[/]",
-        f"  • [bold white]Confluence Space[/]: [magenta]{env.confluence_space_key}[/]"
+        f"  • [bold white]Workspace Root[/]: [dim]{paths['root_dir']}[/]"
     ]
+    if include_jira_confluence:
+        lines.extend([
+            f"  • [bold white]Jira Project[/]: [magenta]{env.jira_project_key}[/]",
+            f"  • [bold white]Confluence Space[/]: [magenta]{env.confluence_space_key}[/]"
+        ])
+    return lines
 
 async def run_system_health() -> list[str]:
     from ..utils.llm import check_ai_health

@@ -142,6 +142,7 @@ _RULES_WITH_ARGS = [
     (r"^(?:nexus\s+)?project\s+info\s+(\S+)$", "project-info"),
     (r"^(?:nexus\s+)?project\s+delete\s+(\S+)$", "project-delete"),
     (r"^(?:nexus\s+)?project\s+archive\s+(\S+)$", "project-archive"),
+    (r"^(?:nexus\s+)?project\s+(?:select|switch|use)\s+(\S+)$|^(?:nexus\s+)?(?:select|switch|use)\s+project\s+(\S+)$|^(?:nexus\s+)?project\s+(\S+)$", "project-select"),
 
     # Epic
     (r"^(?:nexus\s+)?(?:view\s+)?epic(?:\s+view)?\s+(\S+)$", "epic-view"),
@@ -194,6 +195,7 @@ _RULES_WITH_ARGS = [
     (r"^(?:nexus\s+)?docs\s+delete\s+(\S+)$", "docs-delete"),
     (r"^(?:nexus\s+)?docs\s+link\s+(\S+)\s+(\S+)$", "docs-link"),
     (r"^(?:nexus\s+)?docs\s+search\s+(.+)$", "docs-search"),
+    (r"^(?:nexus\s+)?docs\s+(?:select|use|space)\s+(\S+)$|^(?:nexus\s+)?(?:select|use)\s+docs\s+(\S+)$", "docs-select"),
 
     # AI
     (r"^(?:nexus\s+)?ai\s+estimate\s+(\S+)$", "ai-estimate"),
@@ -266,7 +268,7 @@ async def parse_agile_intent_with_llm(text: str) -> AgileIntent:
     prompt = '''Agile (Project Management) command parser. Return JSON: {"command": str, "args": str[]}. 
     For the "plan" command, the first argument is the ticket ID, and the second argument (optional) is the mode ("basic", "detailed", or "comprehensive") if the user requests a detailed, comprehensive, or specific plan type. E.g. "detailed plan for SCRUM-12" should parse to {"command": "plan", "args": ["SCRUM-12", "detailed"]}.
     If the user input is conversational, feedback, correction, or a general natural language task request rather than a direct Agile CLI command, you MUST return {"command": "unknown", "args": []}.
-    Valid commands: project-create, project-list, project-info, project-status, project-delete, project-archive, epic-create, epic-list, epic-view, epic-update, epic-delete, epic-stories, epic-progress, epic-assign, story-create, story-list, story-view, story-update, story-move, story-assign, story-close, story-reopen, story-delete, story-points, story-comment, story-search, task-create, task-update, task-assign, task-move, task-complete, task-delete, task-list, subtask-create, subtask-update, subtask-assign, subtask-complete, subtask-delete, subtask-list, sprint-create, sprint-start, sprint-stop, sprint-close, sprint-delete, sprint-list, sprint-active, sprint-backlog, sprint-report, sprint-burndown, sprint-velocity, board-view, board-backlog, board-active, board-roadmap, board-refresh, jira-auth, jira-login, jira-logout, jira-sync, jira-search, jira-comment, jira-transition, jira-export, jira-import, jira-webhook, docs-create, docs-update, docs-publish, docs-search, docs-delete, docs-link, docs-export, ai-summarize-sprint, ai-summarize-epic, ai-generate-stories, ai-generate-tasks, ai-estimate, ai-roadmap, ai-analyze-blockers, ai-release-notes, ai-standup-report, ai-sprint-review, report-sprint, report-epic, report-velocity, report-workload, report-blockers, report-releases, report-productivity, user-profile, user-permissions, user-list, config-view, status, health, version, doctor, plan, execute, push, reset, reset-all.'''
+    Valid commands: project-create, project-list, project-info, project-status, project-delete, project-archive, project-select, epic-create, epic-list, epic-view, epic-update, epic-delete, epic-stories, epic-progress, epic-assign, story-create, story-list, story-view, story-update, story-move, story-assign, story-close, story-reopen, story-delete, story-points, story-comment, story-search, task-create, task-update, task-assign, task-move, task-complete, task-delete, task-list, subtask-create, subtask-update, subtask-assign, subtask-complete, subtask-delete, subtask-list, sprint-create, sprint-start, sprint-stop, sprint-close, sprint-delete, sprint-list, sprint-active, sprint-backlog, sprint-report, sprint-burndown, sprint-velocity, board-view, board-backlog, board-active, board-roadmap, board-refresh, jira-auth, jira-login, jira-logout, jira-sync, jira-search, jira-comment, jira-transition, jira-export, jira-import, jira-webhook, docs-create, docs-update, docs-publish, docs-search, docs-delete, docs-link, docs-export, docs-select, ai-summarize-sprint, ai-summarize-epic, ai-generate-stories, ai-generate-tasks, ai-estimate, ai-roadmap, ai-analyze-blockers, ai-release-notes, ai-standup-report, ai-sprint-review, report-sprint, report-epic, report-velocity, report-workload, report-blockers, report-releases, report-productivity, user-profile, user-permissions, user-list, config-view, status, health, version, doctor, plan, execute, push, reset, reset-all.'''
     
     parsed = await parse_intent_with_llm(text, prompt)
     if parsed: 
@@ -280,6 +282,7 @@ def get_agile_command_help() -> list[str]:
         "  [bold yellow]project list[/]           Displays all Jira projects accessible to the developer",
         "  [bold yellow]project info[/]           Shows project details like board, members, workflows, and metadata",
         "  [bold yellow]project status[/]         Displays current project health, sprint state, and delivery progress",
+        "  [bold yellow]project select <key>[/]    Selects active Jira project & maps Confluence space",
         "",
         "[bold cyan]── EPIC ACCESS COMMANDS ──[/]",
         "  [bold yellow]epic list[/]              Lists all Epics available in the project",
@@ -325,6 +328,13 @@ def get_agile_command_help() -> list[str]:
         "  [bold yellow]board roadmap[/]          Shows Epic roadmap and timelines",
         "  [bold yellow]board refresh[/]          Refreshes latest board data from Jira",
         "",
+        "[bold cyan]── TICKET IMPLEMENTATION COMMANDS ──[/]",
+        "  [bold yellow]plan <key> [mode][/]     Generates development plan (basic/detailed/comprehensive)",
+        "  [bold yellow]execute <key>[/]         Runs AI coder to modify codebase & generate tests",
+        "  [bold yellow]push <key>[/]            Submits changes, runs tests, and updates ticket status",
+        "  [bold yellow]reset <key>[/]           Resets ticket execution status in workspace",
+        "  [bold yellow]reset-all[/]             Resets all ticket statuses in workspace to TODO",
+        "",
         "[bold cyan]── JIRA OPERATIONS COMMANDS ──[/]",
         "  [bold yellow]jira auth[/]              Authenticates terminal with Jira APIs",
         "  [bold yellow]jira login[/]             Starts Jira session",
@@ -337,6 +347,7 @@ def get_agile_command_help() -> list[str]:
         "[bold cyan]── CONFLUENCE / DOCS COMMANDS ──[/]",
         "  [bold yellow]docs search[/]            Searches Confluence documentation",
         "  [bold yellow]docs link[/]              Links Jira tickets with Confluence pages",
+        "  [bold yellow]docs select <key>[/]      Dynamically switches active Confluence space",
         "",
         "[bold cyan]── AI DEVELOPER OPERATIONS COMMANDS ──[/]",
         "  [bold yellow]ai summarize sprint[/]    AI-generated sprint progress summary",

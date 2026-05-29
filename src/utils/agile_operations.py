@@ -30,12 +30,78 @@ async def pm_project_info(project_key: str = "") -> list[str]:
     ]
 
 async def pm_project_status(project_key: str = "") -> list[str]:
+    key = project_key or env.jira_project_key
+    jira = JiraService()
+    cs = ConfluenceService()
+    
+    old_proj = env.jira_project_key
+    old_space = env.confluence_space_key
+    if project_key:
+        env.jira_project_key = project_key.upper()
+        space_map = {"FP": "FRE", "FD": "FRE", "SCRUM": "NS"}
+        env.confluence_space_key = space_map.get(project_key.upper(), project_key.upper())
+        
+    try:
+        if jira._configured():
+            issues = await jira.fetch_board_issues()
+            epics = await jira.fetch_epics()
+            docs = await cs.search_docs("")
+            
+            epics_count = len(epics)
+            stories = [i for i in issues if i.get("fields", {}).get("issuetype", {}).get("name", "").lower() == "story"]
+            tasks = [i for i in issues if i.get("fields", {}).get("issuetype", {}).get("name", "").lower() == "task"]
+            bugs = [i for i in issues if i.get("fields", {}).get("issuetype", {}).get("name", "").lower() in ("bug", "security")]
+            features = [i for i in issues if i.get("fields", {}).get("issuetype", {}).get("name", "").lower() == "feature"]
+            
+            def get_status_summary(items: list) -> str:
+                total = len(items)
+                if total == 0:
+                    return "0 total"
+                done = sum(1 for i in items if i.get("fields", {}).get("status", {}).get("name", "").lower() in ("done", "completed"))
+                in_prog = sum(1 for i in items if i.get("fields", {}).get("status", {}).get("name", "").lower() in ("in progress", "in development", "under review"))
+                todo = total - done - in_prog
+                return f"{total} total ([bold green]{done} Done[/], [bold yellow]{in_prog} In Progress[/], [bold cyan]{todo} To Do[/])"
+                
+            res = [
+                f"[bold cyan]Project Status ({env.jira_project_key})[/]:",
+                "",
+                f"  • [bold white]Jira Epics[/]:       {epics_count} active",
+                f"  • [bold white]Stories[/]:          {get_status_summary(stories)}",
+                f"  • [bold white]Tasks[/]:            {get_status_summary(tasks)}",
+                f"  • [bold white]Features[/]:         {get_status_summary(features)}",
+                f"  • [bold white]Bugs/Security[/]:    {get_status_summary(bugs)}",
+                "",
+                f"[bold cyan]Linked Confluence Space ({env.confluence_space_key})[/]:"
+            ]
+            if docs:
+                for d in docs[:5]:
+                    res.append(f"  • [bold white]{d['title']}[/] — ([cyan]{d['url']}[/])")
+                if len(docs) > 5:
+                    res.append(f"  • [dim]... and {len(docs) - 5} more documents[/]")
+            else:
+                res.append("  [bold yellow]⚠ No Confluence documents found in active space.[/]")
+            return res
+    except Exception as e:
+        print(f"[Agile] Error generating dynamic project status: {e}")
+    finally:
+        env.jira_project_key = old_proj
+        env.confluence_space_key = old_space
+
+    # Fallback/Mock return
+    space_name = "FRE" if key.upper() in ("FP", "FD") else "NS" if key.upper() == "SCRUM" else key
     return [
-        f"[bold cyan]Project Status ([yellow]{project_key or env.jira_project_key}[/])[/]:",
-        "  [bold green]✓[/] CI/CD Pipeline Connected",
-        "  [bold green]✓[/] Confluence Space Synced",
-        "  [bold green]✓[/] Security Compliance Gate Passing",
-        "  • [dim]Current Sprint Completion: 68%[/]"
+        f"[bold cyan]Project Status ({key})[/]:",
+        "",
+        "  • [bold white]Jira Epics[/]:       3 active (SDLC-101, SDLC-102, SDLC-103)",
+        "  • [bold white]Stories[/]:          12 total ([bold green]5 Done[/], [bold yellow]4 In Progress[/], [bold cyan]3 To Do[/])",
+        "  • [bold white]Tasks[/]:            8 total ([bold green]4 Done[/], [bold yellow]2 In Progress[/], [bold cyan]2 To Do[/])",
+        "  • [bold white]Features[/]:         2 total ([bold green]0 Done[/], [bold yellow]1 In Progress[/], [bold cyan]1 To Do[/])",
+        "  • [bold white]Bugs/Security[/]:    1 total ([bold green]0 Done[/], [bold yellow]0 In Progress[/], [bold cyan]1 To Do[/])",
+        "",
+        f"[bold cyan]Linked Confluence Space ({space_name})[/]:",
+        "  • [bold white]Architecture and System Requirements Spec[/] — ([cyan]https://confluence.sdlc/display/SPEC[/])",
+        "  • [bold white]CI/CD GitOps Pipeline Integration Guide[/] — ([cyan]https://confluence.sdlc/display/GITOPS[/])",
+        "  • [bold white]Developer Quick Start and CLI Guide[/] — ([cyan]https://confluence.sdlc/display/DEV[/])"
     ]
 
 async def pm_project_delete(key: str) -> list[str]:
@@ -43,6 +109,27 @@ async def pm_project_delete(key: str) -> list[str]:
 
 async def pm_project_archive(key: str) -> list[str]:
     return [f"[bold yellow]✓ Project '{key}' successfully archived.[/]", "[dim]Board set to read-only access.[/]"]
+
+async def pm_project_select(key: str) -> list[str]:
+    from ..config.env import env
+    old_key = env.jira_project_key
+    proj_key = key.upper()
+    env.jira_project_key = proj_key
+    
+    # Map Jira project key to Confluence space key dynamically based on project URLs
+    space_map = {
+        "FP": "FRE",
+        "FD": "FRE",
+        "SCRUM": "NS"
+    }
+    space_key = space_map.get(proj_key, proj_key)
+    env.confluence_space_key = space_key
+    
+    return [
+        f"[bold green]✓ Switched active Jira project[/] to '[bold cyan]{proj_key}[/]'.",
+        f"[bold green]✓ Auto-mapped active Confluence space[/] to '[bold cyan]{space_key}[/]'.",
+        f"[dim]All subsequent agile and docs commands will execute against these spaces.[/]"
+    ]
 
 # ── 2. Epic Operations ───────────────────────────────────────
 async def pm_epic_create(summary: str) -> list[str]:
@@ -111,19 +198,29 @@ async def pm_epic_stories(epic_id: str) -> list[str]:
         children = await jira.fetch_child_issues(epic_id)
         if children:
             res = [f"[bold cyan]Linked Stories/Tasks for Epic {epic_id}[/]:", ""]
+            type_colors = {
+                "story": "bold magenta",
+                "task": "bold dodger_blue2",
+                "bug": "bold red",
+                "security": "bold red",
+                "epic": "bold gold1",
+                "feature": "bold orchid"
+            }
             for c in children:
                 key = c.get("key", "")
                 f = c.get("fields", {})
                 st = f.get("status", {}).get("name", "To Do")
+                itype = f.get("issuetype", {}).get("name", "Story")
+                tcolor = type_colors.get(itype.lower(), "bold green")
                 scolor = "bold green" if st.lower() in ["done", "completed"] else "bold yellow" if st.lower() == "in progress" else "bold cyan"
-                res.append(f"  • [[bold cyan]{key}[/]] [bold white]{f.get('summary', '')}[/] — ([{scolor}]{st}[/])")
+                res.append(f"  • [[bold cyan]{key}[/]] [[{tcolor}]{itype}[/]] [bold white]{f.get('summary', '')}[/] — ([{scolor}]{st}[/])")
             return res
         return [f"[bold yellow]⚠ No linked stories or tasks found for Epic {epic_id} in remote Jira.[/]"]
     return [
-        f"[bold cyan]Linked Stories for Epic {epic_id}[/]:",
-        "  • [[bold cyan]SDLC-201[/]] Implement MD5 Incremental SAST Scanner — [green]Done[/]",
-        "  • [[bold cyan]SDLC-202[/]] Enforce Automated Secrets Audit on Git Push — [yellow]In Progress[/]",
-        "  • [[bold cyan]SDLC-203[/]] Build Unified Security Posture Dashboard — [magenta]Todo[/]"
+        f"[bold cyan]Linked Stories/Tasks for Epic {epic_id}[/]:",
+        "  • [[bold cyan]SDLC-201[/]] [bold magenta]Story[/] Implement MD5 Incremental SAST Scanner — [green]Done[/]",
+        "  • [[bold cyan]SDLC-202[/]] [bold magenta]Story[/] Enforce Automated Secrets Audit on Git Push — [yellow]In Progress[/]",
+        "  • [[bold cyan]SDLC-203[/]] [bold magenta]Story[/] Build Unified Security Posture Dashboard — [magenta]Todo[/]"
     ]
 
 async def pm_epic_progress(epic_id: str) -> list[str]:
@@ -573,6 +670,15 @@ async def pm_docs_link(doc: str, ticket_id: str) -> list[str]:
 
 async def pm_docs_export(path: str = "confluence_export.pdf") -> list[str]:
     return [f"[bold green]✓ Space documentation exported to[/] [cyan]{path}[/]."]
+
+async def pm_docs_select(space_key: str) -> list[str]:
+    from ..config.env import env
+    old_key = env.confluence_space_key
+    env.confluence_space_key = space_key.upper()
+    return [
+        f"[bold green]✓ Switched active Confluence space[/] from '[bold cyan]{old_key}[/]' to '[bold cyan]{space_key.upper()}[/]'.",
+        f"[dim]All subsequent Confluence commands will execute against space '{space_key.upper()}'.[/]"
+    ]
 
 # ── 10. AI PM Operations ─────────────────────────────────────
 async def pm_ai_summarize_sprint() -> list[str]:
